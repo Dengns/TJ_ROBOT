@@ -883,8 +883,8 @@ class Marvin_Kine:
                 3 movL的特点在于根据提供的起始目标笛卡尔位姿和终止目标笛卡尔位姿规划一段直线路径点，该接口不约束到达终点时的机器人构型。
                 4 一段规划轨迹会分为加速段，匀速段和减速段， 当起点到终点的距离过短时，匀速段的速度和加速度可能达不到设置值，请知悉。
         '''
-        Serial = ctypes.c_long(self.robot_tag)
-        freq = ctypes.c_long(freq_hz)
+        Serial = int(self.robot_tag)
+        freq = int(freq_hz)
         if len(start_xyzabc) != 6:
             raise ValueError("start_xyzabc must have 6 elements")
         start_array = (ctypes.c_double * 6)(*start_xyzabc)
@@ -940,8 +940,8 @@ class Marvin_Kine:
                 4 一段规划轨迹会分为加速段，匀速段和减速段， 当起点到终点的距离过短时，匀速段的速度和加速度可能达不到设置值，请知悉。
         '''
 
-        Serial = ctypes.c_long(self.robot_tag)
-        freq = ctypes.c_long(freq_hz)
+        Serial = int(self.robot_tag)
+        freq = int(freq_hz)
         path = save_path.encode('utf-8')
         path_char = ctypes.c_char_p(path)
 
@@ -991,7 +991,6 @@ class Marvin_Kine:
         end_array = (ctypes.c_double * 7)(*end_joints)
         vel_arr = c_double(vel)
         acc_arr = c_double(acc)
-
         pset = self.create_point_set(dimension)
         if not pset:
             raise RuntimeError("Failed to create CPointSet object")
