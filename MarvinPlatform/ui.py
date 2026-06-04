@@ -1,5 +1,6 @@
 import tkinter as tk
 from tkinter import messagebox, ttk, scrolledtext, filedialog, simpledialog
+from tkinter import font as tkfont
 import threading
 import time
 import queue
@@ -20,6 +21,74 @@ import random
 import matplotlib
 matplotlib.use('TkAgg')
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+
+UI_FONT_FAMILY = "WenQuanYi Zen Hei"
+UI_FONT_CANDIDATES = (
+    "WenQuanYi Zen Hei",
+    "文泉驿正黑",
+    "Noto Sans CJK SC",
+    "AR PL UMing CN",
+    "AR PL UKai CN",
+    "DejaVu Sans",
+)
+
+
+def configure_ui_fonts(root):
+    """Use a CJK-capable font for Tk and ttk widgets."""
+    global UI_FONT_FAMILY
+    available_fonts = set(tkfont.families(root))
+    UI_FONT_FAMILY = next((font for font in UI_FONT_CANDIDATES if font in available_fonts), UI_FONT_FAMILY)
+    print(f"UI font selected: {UI_FONT_FAMILY}")
+
+    for font_name in ("TkDefaultFont", "TkTextFont", "TkMenuFont", "TkHeadingFont", "TkCaptionFont"):
+        try:
+            tkfont.nametofont(font_name).configure(family=UI_FONT_FAMILY)
+        except tk.TclError:
+            pass
+
+    root.option_add("*Font", (UI_FONT_FAMILY, 9))
+    root.option_add("*Button.Font", (UI_FONT_FAMILY, 9))
+    root.option_add("*Label.Font", (UI_FONT_FAMILY, 9))
+    root.option_add("*Entry.Font", (UI_FONT_FAMILY, 9))
+    root.option_add("*Text.Font", (UI_FONT_FAMILY, 9))
+    root.option_add("*Menu.Font", (UI_FONT_FAMILY, 9))
+    style = ttk.Style(root)
+    style.configure(".", font=(UI_FONT_FAMILY, 9))
+    for style_name in ("TButton", "TLabel", "TEntry", "TCombobox", "TLabelframe", "TLabelframe.Label"):
+        style.configure(style_name, font=(UI_FONT_FAMILY, 9))
+
+
+def apply_font_to_widget_tree(widget):
+    """Force CJK font onto classic Tk widgets that ignore option defaults."""
+    for child in widget.winfo_children():
+        try:
+            if "font" in child.configure():
+                child.configure(font=(UI_FONT_FAMILY, 9))
+            if "disabledforeground" in child.configure():
+                foreground = child.cget("fg") if "fg" in child.configure() else child.cget("foreground")
+                child.configure(disabledforeground=foreground)
+        except tk.TclError:
+            pass
+        apply_font_to_widget_tree(child)
+
+
+def get_pil_font(size):
+    """Return a PIL font that can render Chinese text when available."""
+    from PIL import ImageFont
+
+    font_paths = (
+        "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/truetype/arphic/uming.ttc",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    )
+    for font_path in font_paths:
+        if os.path.exists(font_path):
+            try:
+                return ImageFont.truetype(font_path, size)
+            except OSError:
+                continue
+    return ImageFont.load_default()
 
 class DataSubscriber:
     """数据订阅器，定期更新数据"""
@@ -106,7 +175,7 @@ class EmergencyStopButton:
         font_size = self.radius // 2
         try:
             from PIL import ImageFont
-            font = ImageFont.truetype("arial.ttf", font_size)
+            font = get_pil_font(font_size)
         except:
             font = ImageFont.load_default()
 
@@ -593,10 +662,10 @@ class App:
             img_label_left.pack(side="left", padx=(10, 10), pady=20)
         except:
             # 如果图片不存在，使用文字代替
-            tk.Label(status_title_frame, text="左臂", font=('Arial', 12), bg="white").pack(side="left")
+            tk.Label(status_title_frame, text="左臂", font=(UI_FONT_FAMILY, 12), bg="white").pack(side="left")
 
         # 状态标签
-        tk.Label(status_title_frame, text="左臂", font=('Arial', 12, 'bold'), fg='#2c3e50', bg="white").pack(
+        tk.Label(status_title_frame, text="左臂", font=(UI_FONT_FAMILY, 12, 'bold'), fg='#2c3e50', bg="white").pack(
             side="left", pady=20)
 
         # 状态信息区域
@@ -606,12 +675,12 @@ class App:
         # 控制状态
         control_row = tk.Frame(status_info_frame, bg="white")
         control_row.pack(fill="x", pady=(0, 5))
-        tk.Label(control_row, text="控制状态:", font=('Arial', 9), fg='#2c3e50', width=10, anchor='e', bg="white").pack(
+        tk.Label(control_row, text="控制状态:", font=(UI_FONT_FAMILY, 9), fg='#2c3e50', width=10, anchor='e', bg="white").pack(
             side="left", padx=(0, 5))
         self.left_state_main = tk.Label(
             control_row,
             text='下使能',
-            font=('Arial', 9),
+            font=(UI_FONT_FAMILY, 9),
             fg='#34495e',
             bg='white',
             pady=3,
@@ -623,12 +692,12 @@ class App:
         # 拖动按钮
         drag_row = tk.Frame(status_info_frame, bg="white")
         drag_row.pack(fill="x", pady=(0, 5))
-        tk.Label(drag_row, text="拖动按钮:", font=('Arial', 9), fg='#2c3e50', width=10, anchor='e', bg="white").pack(
+        tk.Label(drag_row, text="拖动按钮:", font=(UI_FONT_FAMILY, 9), fg='#2c3e50', width=10, anchor='e', bg="white").pack(
             side="left", padx=(0, 5))
         self.left_state_1 = tk.Label(
             drag_row,
             text='0',
-            font=('Arial', 9),
+            font=(UI_FONT_FAMILY, 9),
             fg='#34495e',
             bg='white',
             pady=3,
@@ -641,12 +710,12 @@ class App:
         # 低速标志
         speed_row = tk.Frame(status_info_frame, bg="white")
         speed_row.pack(fill="x", pady=(0, 5))
-        tk.Label(speed_row, text="低速标志:", font=('Arial', 9), fg='#2c3e50', width=10, anchor='e', bg="white").pack(
+        tk.Label(speed_row, text="低速标志:", font=(UI_FONT_FAMILY, 9), fg='#2c3e50', width=10, anchor='e', bg="white").pack(
             side="left", padx=(0, 5))
         self.left_state_2 = tk.Label(
             speed_row,
             text='0',
-            font=('Arial', 9),
+            font=(UI_FONT_FAMILY, 9),
             fg='#34495e',
             bg='white',
             pady=3,
@@ -659,12 +728,12 @@ class App:
         # 错误码
         error_row = tk.Frame(status_info_frame, bg="white")
         error_row.pack(fill="x", pady=(0, 5))
-        tk.Label(error_row, text="臂错误码:", font=('Arial', 9), fg='#2c3e50', width=10, anchor='e', bg="white").pack(
+        tk.Label(error_row, text="臂错误码:", font=(UI_FONT_FAMILY, 9), fg='#2c3e50', width=10, anchor='e', bg="white").pack(
             side="left", padx=(0, 5))
         self.left_state_3 = tk.Label(
             error_row,
             text='0',
-            font=('Arial', 9),
+            font=(UI_FONT_FAMILY, 9),
             fg='#34495e',
             bg='white',
             pady=3,
@@ -680,7 +749,7 @@ class App:
         self.left_arm_error = tk.Label(
             error_detail_row,
             text="",
-            font=('Arial', 9),
+            font=(UI_FONT_FAMILY, 9),
             fg='#2c3e50',
             bg='white',
             pady=5,
@@ -717,7 +786,7 @@ class App:
             command=lambda: self.reset_robot_state('A'),
             bg="#2196F3",
             fg="white",
-            font=("Arial", 10, "bold")
+            font=(UI_FONT_FAMILY, 10, "bold")
         )
         self.reset_button.pack(pady=(0, 10))
 
@@ -757,7 +826,7 @@ class App:
             command=lambda: self.error_clear('A'),
             bg="white",
             fg="red",
-            font=("Arial", 10, "bold"),
+            font=(UI_FONT_FAMILY, 10, "bold"),
             relief=tk.RAISED,
             bd=2
         )
@@ -768,11 +837,11 @@ class App:
             text="获取错误",
             width=10,
             command=lambda: self.error_get('A'),
-            font=("Arial", 10, "bold")
+            font=(UI_FONT_FAMILY, 10, "bold")
         )
         self.get_servo_error_left_btn.pack(side="left",padx=(0, 20))
 
-        self.servo_reset_left_label= tk.Label(servo_frame, text="轴:",font=("Arial", 9, "bold"), bg='white' ).pack(side="left", padx=(0, 0))
+        self.servo_reset_left_label= tk.Label(servo_frame, text="轴:",font=(UI_FONT_FAMILY, 9, "bold"), bg='white' ).pack(side="left", padx=(0, 0))
         self.servo_axis_select_combobox_left = ttk.Combobox(
             servo_frame,
             values=["0", "1", "2", "3", "4", "5", "6"],
@@ -787,7 +856,7 @@ class App:
             text="软复位",
             width=5,
             command=lambda: self.servo_set('A'),
-            font=("Arial", 10, "bold"),
+            font=(UI_FONT_FAMILY, 10, "bold"),
             bg='#F5F5DC'
         )
         self.servo_reset_btn_left.pack(side="left",)
@@ -803,7 +872,7 @@ class App:
             command=lambda: self.cr_state('A'),
             bg="#4CAF50",
             fg="white",
-            font=("Arial", 10, "bold")
+            font=(UI_FONT_FAMILY, 10, "bold")
         )
         self.release_collab_left_btn.pack(side="left", padx=(0, 5))
 
@@ -812,7 +881,7 @@ class App:
             text="强制松闸",
             width=10,
             command=lambda: self.release_brake('A'),
-            font=("Arial", 10, "bold")
+            font=(UI_FONT_FAMILY, 10, "bold")
         )
         self.release_brake_left_btn.pack(side="left", padx=(0, 5))
 
@@ -821,7 +890,7 @@ class App:
             text="强制抱闸",
             width=10,
             command=lambda: self.brake('A'),
-            font=("Arial", 10, "bold")
+            font=(UI_FONT_FAMILY, 10, "bold")
         )
         self.hold_brake_left_btn.pack(side="left")
 
@@ -844,25 +913,25 @@ class App:
         param_row.pack(fill="x")
 
         # 速度设置
-        tk.Label(param_row, text="速度:", font=('Arial', 9),bg='white' ).pack(side="left", padx=(0, 2))
-        self.left_speed_entry = tk.Entry(param_row, width=5, font=('Arial', 9), justify='center')
+        tk.Label(param_row, text="速度:", font=(UI_FONT_FAMILY, 9),bg='white' ).pack(side="left", padx=(0, 2))
+        self.left_speed_entry = tk.Entry(param_row, width=5, font=(UI_FONT_FAMILY, 9), justify='center')
         self.left_speed_entry.pack(side="left")
         self.left_speed_entry.insert(0, "20")
-        tk.Label(param_row, text="1%-100%", font=('Arial', 9),bg='white' ).pack(side="left", padx=(0, 5))
+        tk.Label(param_row, text="1%-100%", font=(UI_FONT_FAMILY, 9),bg='white' ).pack(side="left", padx=(0, 5))
 
         # 加速度设置
-        tk.Label(param_row, text="加速度:", font=('Arial', 9),bg='white'  ).pack(side="left", padx=(0, 2))
-        self.left_accel_entry = tk.Entry(param_row, width=5, font=('Arial', 9), justify='center')
+        tk.Label(param_row, text="加速度:", font=(UI_FONT_FAMILY, 9),bg='white'  ).pack(side="left", padx=(0, 2))
+        self.left_accel_entry = tk.Entry(param_row, width=5, font=(UI_FONT_FAMILY, 9), justify='center')
         self.left_accel_entry.pack(side="left")
         self.left_accel_entry.insert(0, "20")
-        tk.Label(param_row, text="1%-100%", font=('Arial', 9),bg='white' ).pack(side="left", padx=(0, 5))
+        tk.Label(param_row, text="1%-100%", font=(UI_FONT_FAMILY, 9),bg='white' ).pack(side="left", padx=(0, 5))
         speed_btn1 = tk.Button(
             param_row,
             text="确认速度和加速度",
             width=15,
             command=lambda: self.vel_acc_set('A'),
             bg="#58C3EE",
-            font=("Arial", 9, "bold")
+            font=(UI_FONT_FAMILY, 9, "bold")
         )
         speed_btn1.pack(side="left", padx=(0, 20))
 
@@ -874,7 +943,7 @@ class App:
             command=lambda: self.show_impedance_dialog('A'),
             bg="#9C27B0",
             fg="white",
-            font=("Arial", 9, "bold")
+            font=(UI_FONT_FAMILY, 9, "bold")
         )
         self.left_impedance_btn.pack(side="left")
 
@@ -890,7 +959,7 @@ class App:
         data_frame.pack(fill="x",pady=(0, 10))
 
         # 关节数据
-        tk.Label(data_frame, text="关节J1-J7:", font=('Arial', 10, 'bold'),bg='white').pack(anchor="w", pady=(0, 5))
+        tk.Label(data_frame, text="关节J1-J7:", font=(UI_FONT_FAMILY, 10, 'bold'),bg='white').pack(anchor="w", pady=(0, 5))
         joint_frame = tk.Frame(data_frame, bg="white")
         joint_frame.pack(fill="x")
 
@@ -898,7 +967,7 @@ class App:
             joint_frame,
             width=45,
             height=1,
-            font=('Arial', 9),
+            font=(UI_FONT_FAMILY, 9),
             bg='white',
             relief=tk.SUNKEN,
             bd=1,
@@ -912,7 +981,7 @@ class App:
         self.left_joint_text.config(state="disabled")
 
         # 笛卡尔数据
-        tk.Label(data_frame, text="笛卡尔XYZABC（末端）:", font=('Arial', 10, 'bold'),bg='white').pack(
+        tk.Label(data_frame, text="笛卡尔XYZABC（末端）:", font=(UI_FONT_FAMILY, 10, 'bold'),bg='white').pack(
             anchor="w", pady=(10, 5))
 
         cartesian_frame = tk.Frame(data_frame, bg="white")
@@ -922,7 +991,7 @@ class App:
             cartesian_frame,
             width=45,
             height=1,
-            font=('Arial', 9),
+            font=(UI_FONT_FAMILY, 9),
             relief=tk.SUNKEN,
             bd=1,
             wrap=tk.NONE
@@ -955,25 +1024,25 @@ class App:
         force_row = tk.Frame(force_control_frame,bg='white')
         force_row.pack(fill="x", pady=(0, 5))
         # 力
-        tk.Label(force_row, text="力：", font=('Arial', 9),bg='white' ).pack(side="left", padx=(0, 0))
-        self.left_force_entry = tk.Entry(force_row, width=5, font=('Arial', 9), justify='center')
+        tk.Label(force_row, text="力：", font=(UI_FONT_FAMILY, 9),bg='white' ).pack(side="left", padx=(0, 0))
+        self.left_force_entry = tk.Entry(force_row, width=5, font=(UI_FONT_FAMILY, 9), justify='center')
         self.left_force_entry.pack(side="left")
         self.left_force_entry.insert(0, "10") #最大不超过60N
-        tk.Label(force_row, text="1N-60N", font=('Arial', 9),bg='white').pack(side="left", padx=(0, 10))
+        tk.Label(force_row, text="1N-60N", font=(UI_FONT_FAMILY, 9),bg='white').pack(side="left", padx=(0, 10))
 
         # 调节量
-        tk.Label(force_row, text="调节量：", font=('Arial', 9),bg='white' ).pack(side="left", padx=(0, 0))
-        self.left_force_adj_entry = tk.Entry(force_row, width=5, font=('Arial', 9), justify='center')
+        tk.Label(force_row, text="调节量：", font=(UI_FONT_FAMILY, 9),bg='white' ).pack(side="left", padx=(0, 0))
+        self.left_force_adj_entry = tk.Entry(force_row, width=5, font=(UI_FONT_FAMILY, 9), justify='center')
         self.left_force_adj_entry.pack(side="left")
         self.left_force_adj_entry.insert(0, "50") #最大不超过50mm
-        tk.Label(force_row, text="1mm-50mm", font=('Arial', 9),bg='white').pack(side="left", padx=(0, 10))
+        tk.Label(force_row, text="1mm-50mm", font=(UI_FONT_FAMILY, 9),bg='white').pack(side="left", padx=(0, 10))
 
         self.left_force_dir_btn1 = tk.Button(
             force_row,
             text="X方向",
             width=5,
             command=lambda: self.imped_f_mode(0,'A'),
-            font=("Arial", 9, "bold"),
+            font=(UI_FONT_FAMILY, 9, "bold"),
             bg='#E2F6FF'
         )
         self.left_force_dir_btn1.pack(side="left",padx=(0,5))
@@ -983,7 +1052,7 @@ class App:
             text="y方向",
             width=5,
             command=lambda: self.imped_f_mode(1,'A'),
-            font=("Arial", 9, "bold"),
+            font=(UI_FONT_FAMILY, 9, "bold"),
             bg='#F6DFF6'
         )
         self.left_force_dir_btn2.pack(side="left",padx=(0,5))
@@ -993,7 +1062,7 @@ class App:
             text="Z方向",
             width=5,
             command=lambda: self.imped_f_mode(2,'A'),
-            font=("Arial", 9, "bold"),
+            font=(UI_FONT_FAMILY, 9, "bold"),
             bg = '#F7F7CE'
         )
         self.left_force_dir_btn3.pack(side="left",padx=(0,5))
@@ -1002,9 +1071,9 @@ class App:
         force_row1 = tk.Frame(force_control_frame,bg='white')
         force_row1.pack(fill="x", pady=(5, 5))
         # 力
-        tk.Label(force_row1, text="任意方向：", font=('Arial', 9),bg='white' ).pack(side="left", padx=(0, 5))
+        tk.Label(force_row1, text="任意方向：", font=(UI_FONT_FAMILY, 9),bg='white' ).pack(side="left", padx=(0, 5))
 
-        left_force_entry1 = tk.Entry(force_row1, textvariable=self.force_dir_a_entry,font=('Arial', 9),width=30)
+        left_force_entry1 = tk.Entry(force_row1, textvariable=self.force_dir_a_entry,font=(UI_FONT_FAMILY, 9),width=30)
         left_force_entry1.pack(side="left",padx=(0,5))
 
         self.left_force_dir_btn3 = tk.Button(
@@ -1012,7 +1081,7 @@ class App:
             text="用户定义",
             width=8,
             command=lambda: self.imped_f_mode(3,'A'),
-            font=("Arial", 9, "bold"),
+            font=(UI_FONT_FAMILY, 9, "bold"),
             bg='#CCCCFF'
         )
         self.left_force_dir_btn3.pack(side="left",padx=(5,5))
@@ -1057,7 +1126,7 @@ class App:
 
         # 第三列：1#运行按钮
         self.btn_run1 = tk.Button(joints_row1, text="运行", width=8,command=lambda :self.run_joints('A'),
-                                  font=("Arial", 11, "bold"),fg='white', bg='#EC2A23',border=5)
+                                  font=(UI_FONT_FAMILY, 11, "bold"),fg='white', bg='#EC2A23',border=5)
         self.btn_run1.pack(side="left", padx=(0, 5))
 
         #第三行 保存导入
@@ -1078,7 +1147,7 @@ class App:
         self.run_period_1.pack(side="left", padx=(0, 5))
 
         self.period_path_entry_1 = tk.Entry(joints_row3, textvariable=self.period_file_path_1, width=45,
-                                            font=("Arial", 9), bg='white')
+                                            font=(UI_FONT_FAMILY, 9), bg='white')
         self.period_path_entry_1.pack(side="left", padx=(0, 5), expand=True)
 
         self.btn_load_file1 = tk.Button(joints_row3, text="选择文件", width=8,
@@ -1128,10 +1197,10 @@ class App:
             img_label_right.pack(side="left", padx=(10, 10), pady=20)
         except:
             # 如果图片不存在，使用文字代替
-            tk.Label(status_title_frame, text="右臂", font=('Arial', 12), bg="white").pack(side="left")
+            tk.Label(status_title_frame, text="右臂", font=(UI_FONT_FAMILY, 12), bg="white").pack(side="left")
 
         # 状态标签
-        tk.Label(status_title_frame, text="右臂", font=('Arial', 12, 'bold'), fg='#2c3e50', bg="white").pack(
+        tk.Label(status_title_frame, text="右臂", font=(UI_FONT_FAMILY, 12, 'bold'), fg='#2c3e50', bg="white").pack(
             side="left", pady=20)
 
         # 状态信息区域
@@ -1141,12 +1210,12 @@ class App:
         # 控制状态
         control_row = tk.Frame(status_info_frame, bg="white")
         control_row.pack(fill="x", pady=(0, 5))
-        tk.Label(control_row, text="控制状态:", font=('Arial', 9), fg='#2c3e50', width=10, anchor='e', bg="white").pack(
+        tk.Label(control_row, text="控制状态:", font=(UI_FONT_FAMILY, 9), fg='#2c3e50', width=10, anchor='e', bg="white").pack(
             side="left", padx=(0, 5))
         self.right_state_main = tk.Label(
             control_row,
             text='下使能',
-            font=('Arial', 9),
+            font=(UI_FONT_FAMILY, 9),
             fg='#34495e',
             bg='white',
             pady=3,
@@ -1159,12 +1228,12 @@ class App:
         # 拖动按钮
         drag_row = tk.Frame(status_info_frame, bg="white")
         drag_row.pack(fill="x", pady=(0, 5))
-        tk.Label(drag_row, text="拖动按钮:", font=('Arial', 9), fg='#2c3e50', width=10, anchor='e', bg="white").pack(
+        tk.Label(drag_row, text="拖动按钮:", font=(UI_FONT_FAMILY, 9), fg='#2c3e50', width=10, anchor='e', bg="white").pack(
             side="left", padx=(0, 5))
         self.right_state_1 = tk.Label(
             drag_row,
             text='0',
-            font=('Arial', 9),
+            font=(UI_FONT_FAMILY, 9),
             fg='#34495e',
             bg='white',
             pady=3,
@@ -1177,12 +1246,12 @@ class App:
         # 低速标志
         speed_row = tk.Frame(status_info_frame, bg="white")
         speed_row.pack(fill="x", pady=(0, 5))
-        tk.Label(speed_row, text="低速标志:", font=('Arial', 9), fg='#2c3e50', width=10, anchor='e', bg="white").pack(
+        tk.Label(speed_row, text="低速标志:", font=(UI_FONT_FAMILY, 9), fg='#2c3e50', width=10, anchor='e', bg="white").pack(
             side="left", padx=(0, 5))
         self.right_state_2 = tk.Label(
             speed_row,
             text='0',
-            font=('Arial', 9),
+            font=(UI_FONT_FAMILY, 9),
             fg='#34495e',
             bg='white',
             pady=3,
@@ -1195,12 +1264,12 @@ class App:
         # 错误码
         error_row = tk.Frame(status_info_frame, bg="white")
         error_row.pack(fill="x", pady=(0, 5))
-        tk.Label(error_row, text="臂错误码:", font=('Arial', 9), fg='#2c3e50', width=10, anchor='e', bg="white").pack(
+        tk.Label(error_row, text="臂错误码:", font=(UI_FONT_FAMILY, 9), fg='#2c3e50', width=10, anchor='e', bg="white").pack(
             side="left", padx=(0, 5))
         self.right_state_3 = tk.Label(
             error_row,
             text='1',
-            font=('Arial', 9),
+            font=(UI_FONT_FAMILY, 9),
             fg='#34495e',
             bg='white',
             pady=3,
@@ -1216,7 +1285,7 @@ class App:
         self.right_arm_error = tk.Label(
             error_detail_row,
             text="",
-            font=('Arial', 9),
+            font=(UI_FONT_FAMILY, 9),
             fg='#2c3e50',
             bg='white',
             pady=3,
@@ -1254,7 +1323,7 @@ class App:
             command=lambda: self.reset_robot_state('B'),
             bg="#2196F3",
             fg="white",
-            font=("Arial", 10, "bold")
+            font=(UI_FONT_FAMILY, 10, "bold")
         )
         self.reset_button_r.pack(pady=(0, 10))
 
@@ -1294,7 +1363,7 @@ class App:
             command=lambda: self.error_clear('B'),
             bg="white",
             fg="red",
-            font=("Arial", 10, "bold"),
+            font=(UI_FONT_FAMILY, 10, "bold"),
             relief=tk.RAISED,
             bd=2
         )
@@ -1305,11 +1374,11 @@ class App:
             text="获取错误",
             width=10,
             command=lambda: self.error_get('B'),
-            font=("Arial", 10, "bold")
+            font=(UI_FONT_FAMILY, 10, "bold")
         )
         self.get_servo_error_right_btn.pack(side="left",padx=(0, 20))
 
-        self.servo_reset_right_label = tk.Label(servo_frame, text="轴:", font=("Arial", 9, "bold"), bg='white').pack(
+        self.servo_reset_right_label = tk.Label(servo_frame, text="轴:", font=(UI_FONT_FAMILY, 9, "bold"), bg='white').pack(
             side="left", padx=(0, 0))
         self.servo_axis_select_combobox_right = ttk.Combobox(
             servo_frame,
@@ -1325,7 +1394,7 @@ class App:
             text="软复位",
             width=5,
             command=lambda: self.servo_set('B'),
-            font=("Arial", 10, "bold"),
+            font=(UI_FONT_FAMILY, 10, "bold"),
             bg='#F5F5DC'
         )
         self.servo_reset_btn_right.pack(side="left", )
@@ -1341,7 +1410,7 @@ class App:
             command=lambda: self.cr_state('B'),
             bg="#4CAF50",
             fg="white",
-            font=("Arial", 10, "bold")
+            font=(UI_FONT_FAMILY, 10, "bold")
         )
         self.release_collab_right_btn.pack(side="left", padx=(0, 5))
 
@@ -1350,7 +1419,7 @@ class App:
             text="强制松闸",
             width=10,
             command=lambda: self.release_brake('B'),
-            font=("Arial", 10, "bold")
+            font=(UI_FONT_FAMILY, 10, "bold")
         )
         self.release_brake_right_btn.pack(side="left", padx=(0, 5))
 
@@ -1359,7 +1428,7 @@ class App:
             text="强制抱闸",
             width=10,
             command=lambda: self.brake('B'),
-            font=("Arial", 10, "bold")
+            font=(UI_FONT_FAMILY, 10, "bold")
         )
         self.hold_brake_right_btn.pack(side="left")
 
@@ -1382,25 +1451,25 @@ class App:
         param_row.pack(fill="x")
 
         # 速度设置
-        tk.Label(param_row, text="速度:", font=('Arial', 9),bg='white' ).pack(side="left", padx=(0, 2))
-        self.right_speed_entry = tk.Entry(param_row, width=5, font=('Arial', 9), justify='center')
+        tk.Label(param_row, text="速度:", font=(UI_FONT_FAMILY, 9),bg='white' ).pack(side="left", padx=(0, 2))
+        self.right_speed_entry = tk.Entry(param_row, width=5, font=(UI_FONT_FAMILY, 9), justify='center')
         self.right_speed_entry.pack(side="left")
         self.right_speed_entry.insert(0, "20")
-        tk.Label(param_row, text="1%-100%", font=('Arial', 9),bg='white' ).pack(side="left", padx=(0, 5))
+        tk.Label(param_row, text="1%-100%", font=(UI_FONT_FAMILY, 9),bg='white' ).pack(side="left", padx=(0, 5))
 
         # 加速度设置
-        tk.Label(param_row, text="加速度:", font=('Arial', 9),bg='white'  ).pack(side="left", padx=(0, 2))
-        self.right_accel_entry = tk.Entry(param_row, width=5, font=('Arial', 9), justify='center')
+        tk.Label(param_row, text="加速度:", font=(UI_FONT_FAMILY, 9),bg='white'  ).pack(side="left", padx=(0, 2))
+        self.right_accel_entry = tk.Entry(param_row, width=5, font=(UI_FONT_FAMILY, 9), justify='center')
         self.right_accel_entry.pack(side="left")
         self.right_accel_entry.insert(0, "20")
-        tk.Label(param_row, text="1%-100%", font=('Arial', 9),bg='white' ).pack(side="left", padx=(0, 5))
+        tk.Label(param_row, text="1%-100%", font=(UI_FONT_FAMILY, 9),bg='white' ).pack(side="left", padx=(0, 5))
         speed_btn=tk.Button(
             param_row,
             text="确认速度和加速度",
             width=15,
             command=lambda: self.vel_acc_set('B'),
             bg="#58C3EE",
-            font=("Arial", 9, "bold")
+            font=(UI_FONT_FAMILY, 9, "bold")
         )
         speed_btn.pack(side="left",padx=(0,20))
 
@@ -1412,7 +1481,7 @@ class App:
             command=lambda: self.show_impedance_dialog('B'),
             bg="#9C27B0",
             fg="white",
-            font=("Arial", 9, "bold")
+            font=(UI_FONT_FAMILY, 9, "bold")
         )
         self.right_impedance_btn.pack(side="left")
 
@@ -1428,14 +1497,14 @@ class App:
         data_frame.pack(fill="x",pady=(0, 10))
 
         # 关节数据
-        tk.Label(data_frame, text="关节J1-J7:", font=('Arial', 10, 'bold'), bg="white").pack(anchor="w", pady=(0, 5))
+        tk.Label(data_frame, text="关节J1-J7:", font=(UI_FONT_FAMILY, 10, 'bold'), bg="white").pack(anchor="w", pady=(0, 5))
         joint_frame = tk.Frame(data_frame, bg="white")
         joint_frame.pack(fill="x")
         self.right_joint_text = tk.Text(
             joint_frame,
             width=45,
             height=1,
-            font=('Arial', 9),
+            font=(UI_FONT_FAMILY, 9),
             bg='white',
             relief=tk.SUNKEN,
             bd=1,
@@ -1449,7 +1518,7 @@ class App:
         self.right_joint_text.config(state="disabled")
 
         # 笛卡尔数据
-        tk.Label(data_frame, text="笛卡尔XYZABC（末端）:", font=('Arial', 10, 'bold'), bg="white").pack(
+        tk.Label(data_frame, text="笛卡尔XYZABC（末端）:", font=(UI_FONT_FAMILY, 10, 'bold'), bg="white").pack(
             anchor="w", pady=(10, 5))
 
         cartesian_frame = tk.Frame(data_frame, bg="white")
@@ -1458,7 +1527,7 @@ class App:
             cartesian_frame,
             width=45,
             height=1,
-            font=('Arial', 9),
+            font=(UI_FONT_FAMILY, 9),
             bg='white',
             relief=tk.SUNKEN,
             bd=1,
@@ -1492,25 +1561,25 @@ class App:
         force_row = tk.Frame(force_control_frame, bg='white')
         force_row.pack(fill="x", pady=(0, 5))
         # 力
-        tk.Label(force_row, text="力：", font=('Arial', 9),bg='white').pack(side="left", padx=(0, 0))
-        self.right_force_entry = tk.Entry(force_row, width=5, font=('Arial', 9), justify='center')
+        tk.Label(force_row, text="力：", font=(UI_FONT_FAMILY, 9),bg='white').pack(side="left", padx=(0, 0))
+        self.right_force_entry = tk.Entry(force_row, width=5, font=(UI_FONT_FAMILY, 9), justify='center')
         self.right_force_entry.pack(side="left")
         self.right_force_entry.insert(0, "10")  # 最大不超过60N
-        tk.Label(force_row, text="1N-60N", font=('Arial', 9),bg='white').pack(side="left", padx=(0, 10))
+        tk.Label(force_row, text="1N-60N", font=(UI_FONT_FAMILY, 9),bg='white').pack(side="left", padx=(0, 10))
 
         # 调节量
-        tk.Label(force_row, text="调节量：", font=('Arial', 9),bg='white').pack(side="left", padx=(0, 0))
-        self.right_force_adj_entry = tk.Entry(force_row, width=5, font=('Arial', 9), justify='center')
+        tk.Label(force_row, text="调节量：", font=(UI_FONT_FAMILY, 9),bg='white').pack(side="left", padx=(0, 0))
+        self.right_force_adj_entry = tk.Entry(force_row, width=5, font=(UI_FONT_FAMILY, 9), justify='center')
         self.right_force_adj_entry.pack(side="left")
         self.right_force_adj_entry.insert(0, "50")  # 最大不超过50mm
-        tk.Label(force_row, text="1mm-50mm", font=('Arial', 9),bg='white').pack(side="left", padx=(0, 10))
+        tk.Label(force_row, text="1mm-50mm", font=(UI_FONT_FAMILY, 9),bg='white').pack(side="left", padx=(0, 10))
 
         self.right_force_dir_btn1 = tk.Button(
             force_row,
             text="X方向",
             width=5,
             command=lambda: self.imped_f_mode(0, 'B'),
-            font=("Arial", 9, "bold"),
+            font=(UI_FONT_FAMILY, 9, "bold"),
             bg='#E2F6FF'
         )
         self.right_force_dir_btn1.pack(side="left", padx=(0, 5))
@@ -1520,7 +1589,7 @@ class App:
             text="y方向",
             width=5,
             command=lambda: self.imped_f_mode(1, 'B'),
-            font=("Arial", 9, "bold"),
+            font=(UI_FONT_FAMILY, 9, "bold"),
             bg='#F6DFF6'
         )
         self.right_force_dir_btn2.pack(side="left", padx=(0, 5))
@@ -1530,7 +1599,7 @@ class App:
             text="Z方向",
             width=5,
             command=lambda: self.imped_f_mode(2, 'B'),
-            font=("Arial", 9, "bold"),
+            font=(UI_FONT_FAMILY, 9, "bold"),
             bg='#F7F7CE'
         )
         self.right_force_dir_btn3.pack(side="left", padx=(0, 5))
@@ -1539,9 +1608,9 @@ class App:
         force_row1 = tk.Frame(force_control_frame, bg='white')
         force_row1.pack(fill="x", pady=(5, 5))
         # 力
-        tk.Label(force_row1, text="任意方向：", font=('Arial', 9), bg='white').pack(side="left", padx=(0, 5))
+        tk.Label(force_row1, text="任意方向：", font=(UI_FONT_FAMILY, 9), bg='white').pack(side="left", padx=(0, 5))
 
-        left_force_entry1 = tk.Entry(force_row1, textvariable=self.force_dir_b_entry, font=('Arial', 9), width=30)
+        left_force_entry1 = tk.Entry(force_row1, textvariable=self.force_dir_b_entry, font=(UI_FONT_FAMILY, 9), width=30)
         left_force_entry1.pack(side="left", padx=(0, 5))
 
         self.right_force_dir_btn3 = tk.Button(
@@ -1549,7 +1618,7 @@ class App:
             text="用户定义",
             width=8,
             command=lambda: self.imped_f_mode(3, 'B'),
-            font=("Arial", 9, "bold"),
+            font=(UI_FONT_FAMILY, 9, "bold"),
             bg='#CCCCFF'
         )
         self.right_force_dir_btn3.pack(side="left", padx=(5, 5))
@@ -1595,7 +1664,7 @@ class App:
 
         # 第三列：1#运行按钮
         self.btn_run2 = tk.Button(joints_row1, text="运行", width=8, command=lambda: self.run_joints('B'),
-                                  font=("Arial", 11, "bold"),fg='white', bg='#EC2A23',border=5)
+                                  font=(UI_FONT_FAMILY, 11, "bold"),fg='white', bg='#EC2A23',border=5)
         self.btn_run2.pack(side="left", padx=(0, 5))
 
         # 第三行 保存导入
@@ -1618,7 +1687,7 @@ class App:
         self.run_period_2.pack(side="left", padx=(0, 5))
 
         self.period_path_entry_2 = tk.Entry(joints_row3, textvariable=self.period_file_path_2, width=45,
-                                            font=("Arial", 9), bg='white')
+                                            font=(UI_FONT_FAMILY, 9), bg='white')
         self.period_path_entry_2.pack(side="left", padx=(0, 5),expand=True)
 
         self.btn_load_file2 = tk.Button(joints_row3, text="选择文件",width=8,  command=lambda: self.select_period_file('B'))
@@ -1687,7 +1756,7 @@ class App:
         self.sensor_frame_2.pack(fill="x",padx=5,pady=(15,10))
         # 第1 :text
         self.sensor_main_tex = tk.Label(self.sensor_frame_2, text="传感器偏置获取与设置", bg="#2196F3",
-                                      fg="white", font=("Arial", 10, "bold"))
+                                      fg="white", font=(UI_FONT_FAMILY, 10, "bold"))
         self.sensor_main_tex.pack(fill='x')
 
 
@@ -1761,7 +1830,7 @@ class App:
         self.encoder_frame_1.pack(fill="x",padx=5,pady=(25,10))
         # 第1 :text
         self.encoder_frame_1 = tk.Label(self.encoder_frame_1, text="电机编码器清零与清错", bg="#2196F3",
-                                      fg="white", font=("Arial", 10, "bold"))
+                                      fg="white", font=(UI_FONT_FAMILY, 10, "bold"))
         self.encoder_frame_1.pack(fill='x')
         '''left arm'''
         self.motor_frame_1 = tk.Frame(sensor_encoder_window, bg="white")
@@ -1884,7 +1953,7 @@ class App:
 
                 # 臂标签
                 arm_label = "左臂" if self.arm_id == 0 else "右臂"
-                tk.Label(ctrl_frame, text=arm_label, font=("Arial", 10, "bold"),bg="white").pack(side=tk.LEFT, padx=5)
+                tk.Label(ctrl_frame, text=arm_label, font=(UI_FONT_FAMILY, 10, "bold"),bg="white").pack(side=tk.LEFT, padx=5)
 
 
                 # 数据类型下拉框
@@ -2049,7 +2118,7 @@ class App:
         title_frame.pack(fill="x",padx=5,pady=(15,10))
         # 第1 :text
         title_label = tk.Label(title_frame, text="参数更新", bg="#2196F3",
-                                      fg="white", font=("Arial", 10, "bold"))
+                                      fg="white", font=(UI_FONT_FAMILY, 10, "bold"))
         title_label.pack(fill='x')
 
 
@@ -2079,7 +2148,7 @@ class App:
         title_frame_.pack(fill="x",padx=5,pady=(25,10))
         # 第1 :text
         title_label_ = tk.Label(title_frame_, text="系统升级", bg="#2196F3",
-                                      fg="white", font=("Arial", 10, "bold"))
+                                      fg="white", font=(UI_FONT_FAMILY, 10, "bold"))
         title_label_.pack(fill='x',expand=True)
 
         state_a_frame1 = tk.Frame(hidden_window, bg="white")
@@ -2087,7 +2156,7 @@ class App:
         reset_a_button = tk.Button(state_a_frame1, text="更新系统", width=10,
                                    command=self.update_sys, bg="#F6FC39",
                                    fg="#151513",
-                                   font=("Arial", 10, "bold")).pack(side='left', expand=True)
+                                   font=(UI_FONT_FAMILY, 10, "bold")).pack(side='left', expand=True)
         # reset_a_button.pack(side="left")
 
         state_a_frame2 = tk.Frame(hidden_window, bg="white")
@@ -2704,7 +2773,7 @@ class App:
 
     def create_network_settings_tab(self, parent):
         """创建网络设置选项卡内容"""
-        ttk.Label(parent, text="网络设置", font=("Arial", 14, "bold")).pack(pady=10)
+        ttk.Label(parent, text="网络设置", font=(UI_FONT_FAMILY, 14, "bold")).pack(pady=10)
 
         network_frame = ttk.LabelFrame(parent, text="网络配置", padding="15")
         network_frame.pack(fill=tk.X, pady=10)
@@ -2738,7 +2807,7 @@ class App:
         self.row2_var.trace('w', lambda *args: self.on_selection_change(2))
         self.row3_var.trace('w', lambda *args: self.on_selection_change(3))
 
-        ttk.Label(parent, text="浮动基座参数计算", font=("Arial", 14, "bold")).pack(pady=10)
+        ttk.Label(parent, text="浮动基座参数计算", font=(UI_FONT_FAMILY, 14, "bold")).pack(pady=10)
 
         # 第一行
         row1_frame = ttk.Frame(parent)
@@ -2788,7 +2857,7 @@ class App:
 
     def create_interface_settings_tab(self, parent):
         """创建界面设置选项卡内容"""
-        ttk.Label(parent, text="界面设置", font=("Arial", 14, "bold")).pack(pady=10)
+        ttk.Label(parent, text="界面设置", font=(UI_FONT_FAMILY, 14, "bold")).pack(pady=10)
 
         interface_frame = ttk.LabelFrame(parent, text="界面配置", padding="15")
         interface_frame.pack(fill=tk.X, pady=10)
@@ -3399,7 +3468,7 @@ class App:
             title_label = tk.Label(
                 main_frame,
                 text=f"{arm_side}阻抗参数设置",
-                font=('Arial', 10, 'bold'),
+                font=(UI_FONT_FAMILY, 10, 'bold'),
                 fg='#2c3e50'
             )
             title_label.pack(pady=(0, 10))
@@ -3472,7 +3541,7 @@ class App:
             title_label1 = tk.Label(
                 main_frame1,
                 text=f"{arm_side}阻抗参数设置",
-                font=('Arial', 10, 'bold'),
+                font=(UI_FONT_FAMILY, 10, 'bold'),
                 fg='#2c3e50'
             )
             title_label1.pack(pady=(0, 10))
@@ -3926,7 +3995,7 @@ class App:
                 save_frame,
                 text="保存拖动数据",
                 variable=save_drag_var,
-                font=('Arial', 10),
+                font=(UI_FONT_FAMILY, 10),
                 bg='white'
             )
             save_checkbox.pack(anchor='w')
@@ -3936,7 +4005,7 @@ class App:
             separator1.pack(fill="x", padx=20, pady=(0, 10))
 
             # 第二行：拖动类型标题
-            tk.Label(drag_dialog, text="选择拖动类型:", bg='white',font=('Arial', 10)).pack(pady=(0, 5), anchor='w', padx=20)
+            tk.Label(drag_dialog, text="选择拖动类型:", bg='white',font=(UI_FONT_FAMILY, 10)).pack(pady=(0, 5), anchor='w', padx=20)
 
             # 关节拖动选项
             joint_frame = tk.Frame(drag_dialog,bg='white')
@@ -3948,7 +4017,7 @@ class App:
                 variable=drag_type_var,
                 value="joint_drag",
                 bg='white',
-                font=('Arial', 9),
+                font=(UI_FONT_FAMILY, 9),
                 command=lambda: axis_var.set("")  # 清空轴选择
             ).pack(anchor='w')
 
@@ -3962,14 +4031,14 @@ class App:
                 variable=drag_type_var,
                 value="cartesian_drag",
                 bg='white',
-                font=('Arial', 9)
+                font=(UI_FONT_FAMILY, 9)
             ).pack(anchor='w')
 
             # 笛卡尔拖动的轴选择
             axis_frame = tk.Frame(drag_dialog,bg='white')
             axis_frame.pack(anchor='w', padx=60, pady=5)
 
-            tk.Label(axis_frame, text="选择拖动轴:",bg='white', font=('Arial', 9)).pack(anchor='w', pady=(5, 0))
+            tk.Label(axis_frame, text="选择拖动轴:",bg='white', font=(UI_FONT_FAMILY, 9)).pack(anchor='w', pady=(5, 0))
 
             # 创建轴选择单选按钮组
             axis_options = ["X拖动", "Y拖动", "Z拖动", "R拖动"]
@@ -3980,7 +4049,7 @@ class App:
                     text=axis,
                     variable=axis_var,
                     value=axis,
-                    font=('Arial', 9),
+                    font=(UI_FONT_FAMILY, 9),
                     bg='white',
                     state=tk.DISABLED  # 初始禁用，等待选择笛卡尔拖动
                 ).pack(anchor='w')
@@ -4298,7 +4367,7 @@ class App:
             command=self.toggle_connection,
             bg="#4CAF50",
             fg="white",
-            font=("Arial", 10, "bold"))
+            font=(UI_FONT_FAMILY, 10, "bold"))
         self.connect_btn.pack(side="left", padx=5)
 
         self.arm_ip_entry = tk.Entry(self.control_frame)
@@ -4313,7 +4382,7 @@ class App:
             command=self.show_more_features,
             bg="#3BA4FD",
             fg="white",
-            font=("Arial", 10, "bold")
+            font=(UI_FONT_FAMILY, 10, "bold")
         )
         self.more_features_btn.pack(side="right", padx=5)
 
@@ -4327,7 +4396,7 @@ class App:
             command=self.data_collect_and_process_dialog,
             bg="#3BA4FD",
             fg="white",
-            font=("Arial", 10, "bold"))
+            font=(UI_FONT_FAMILY, 10, "bold"))
         self.mode_btn.pack(side="right", padx=5)
 
         # 末端透传
@@ -4338,7 +4407,7 @@ class App:
             command=self.eef_dialog,
             bg="#3BA4FD",
             fg="white",
-            font=("Arial", 10, "bold"))
+            font=(UI_FONT_FAMILY, 10, "bold"))
         self.mode_btn.pack(side="right", padx=5)
 
         # 工具动力学辨识
@@ -4349,7 +4418,7 @@ class App:
             command=self.tool_identy_dialog,
             bg="#3BA4FD",
             fg="white",
-            font=("Arial", 10, "bold"))
+            font=(UI_FONT_FAMILY, 10, "bold"))
         self.mode_btn.pack(side="right", padx=5)
 
         # 模式切换按钮
@@ -4360,15 +4429,15 @@ class App:
             command=self.toggle_display_mode,
             bg="#3BA4FD",
             fg="white",
-            font=("Arial", 10, "bold"))
+            font=(UI_FONT_FAMILY, 10, "bold"))
         self.mode_btn.pack(side="right", padx=5)
 
         # 状态指示灯
         status_frame = tk.Frame(self.control_frame, bg="#e0e0e0")
         status_frame.pack(side="right", padx=5)
-        self.status_light = tk.Label(status_frame, text="●", font=("Arial", 16), fg="red")
+        self.status_light = tk.Label(status_frame, text="●", font=(UI_FONT_FAMILY, 16), fg="red")
         self.status_light.pack(side="left", padx=5)
-        self.status_label = tk.Label(status_frame, text="未连接", bg="#e0e0e0", font=("Arial", 9))
+        self.status_label = tk.Label(status_frame, text="未连接", bg="#e0e0e0", font=(UI_FONT_FAMILY, 9))
         self.status_label.pack(side="left")
 
     def create_status_bar(self):
@@ -4376,10 +4445,10 @@ class App:
         self.status_bar = tk.Frame(self.root, height=20)
         self.status_bar.pack(side="bottom", fill="x")
         self.version_label = tk.Label(
-            self.status_bar, text=f"", fg="black", font=("Arial", 9))
+            self.status_bar, text=f"", fg="black", font=(UI_FONT_FAMILY, 9))
         self.version_label.pack(side="left", padx=15)
         self.time_label = tk.Label(
-            self.status_bar, text="", fg="black", font=("Arial", 9))
+            self.status_bar, text="", fg="black", font=(UI_FONT_FAMILY, 9))
         self.time_label.pack(side="right", padx=15)
         self.update_time()
 
@@ -4511,7 +4580,7 @@ class App:
         self.frame_data_11.pack(fill="x", pady=15)
         # 查看文档
         self.read_file_button = tk.Button(self.frame_data_11, text="采集ID说明", width=15, command=preview_text_file_1,
-                                          font=("Arial", 10, "bold"))
+                                          font=(UI_FONT_FAMILY, 10, "bold"))
         self.read_file_button.grid(row=0, column=0, padx=5)
 
         self.frame_data_2 = tk.Frame(parent, bg="white")
@@ -4625,7 +4694,7 @@ class App:
         self.btn_load_file_50.grid(row=0, column=1, padx=5)
 
         self.path_50 = tk.Entry(self.frame_data_4, textvariable=self.file_path_50, width=75,
-                                font=("Arial", 7), state="readonly")
+                                font=(UI_FONT_FAMILY, 7), state="readonly")
         self.path_50.grid(row=0, column=2, padx=5, sticky="ew")
 
         self.run_generate_50 = tk.Button(self.frame_data_4, text="生成50点位", command=self.generate_50_file)
@@ -4642,7 +4711,7 @@ class App:
         self.btn_load_collect.grid(row=0, column=1, padx=5)
 
         self.path_collect = tk.Entry(self.frame_data_6, textvariable=self.file_path_collect, width=75,
-                                font=("Arial", 7), state="readonly")
+                                font=(UI_FONT_FAMILY, 7), state="readonly")
         self.path_collect.grid(row=0, column=2, padx=5, sticky="ew")
 
         self.run_generate_pvt = tk.Button(self.frame_data_6, text="处理并保存", command=self.generate_pvt_file)
@@ -5226,7 +5295,7 @@ class App:
         self.pln_frame_1.pack(fill="x", padx=5, pady=(15, 10))
         #显示当前关节和当前xyzabc
         self.arm_text = tk.Label(self.pln_frame_1, text="关节实时数据", bg="#2196F3",
-                                        fg="white", font=("Arial", 10, "bold"))
+                                        fg="white", font=(UI_FONT_FAMILY, 10, "bold"))
         self.arm_text.pack(fill='x')
 
         self.pln_frame_2 = tk.Frame(pln_window, bg="white")
@@ -5265,33 +5334,33 @@ class App:
         self.pln_frame_3.pack(fill="x", padx=5, pady=(15, 10))
         #显示当前关节和当前xyzabc
         self.arm_text_1 = tk.Label(self.pln_frame_3, text="末端直线", bg="#2196F3",
-                                        fg="white", font=("Arial", 10, "bold"))
+                                        fg="white", font=(UI_FONT_FAMILY, 10, "bold"))
         self.arm_text_1.pack(fill='x')
 
         self.pln_frame_31 = tk.Frame(pln_window, bg="white")
         self.pln_frame_31.pack(fill="x", padx=5, pady=(10, 5))
         #点动距离，速度
-        tk.Label(self.pln_frame_31 , text="规划速度：", font=('Arial', 9), bg='white').pack(side="left", padx=(0, 0))
-        self.pln_speed_entry_1 = tk.Entry(self.pln_frame_31 , width=5, font=('Arial', 9), justify='center')
+        tk.Label(self.pln_frame_31 , text="规划速度：", font=(UI_FONT_FAMILY, 9), bg='white').pack(side="left", padx=(0, 0))
+        self.pln_speed_entry_1 = tk.Entry(self.pln_frame_31 , width=5, font=(UI_FONT_FAMILY, 9), justify='center')
         self.pln_speed_entry_1.pack(side="left")
         self.pln_speed_entry_1.insert(0, "100")
-        tk.Label(self.pln_frame_31 , text="1mm/s-500mm/s", font=('Arial', 9), bg='white').pack(side="left", padx=(0, 40))
+        tk.Label(self.pln_frame_31 , text="1mm/s-500mm/s", font=(UI_FONT_FAMILY, 9), bg='white').pack(side="left", padx=(0, 40))
 
-        tk.Label(self.pln_frame_31 , text="单步距离：", font=('Arial', 9), bg='white').pack(side="left", padx=(5, 0))
-        self.pln_speed_entry_2 = tk.Entry(self.pln_frame_31 , width=5, font=('Arial', 9), justify='center')
+        tk.Label(self.pln_frame_31 , text="单步距离：", font=(UI_FONT_FAMILY, 9), bg='white').pack(side="left", padx=(5, 0))
+        self.pln_speed_entry_2 = tk.Entry(self.pln_frame_31 , width=5, font=(UI_FONT_FAMILY, 9), justify='center')
         self.pln_speed_entry_2.pack(side="left")
         self.pln_speed_entry_2.insert(0, "50")
-        tk.Label(self.pln_frame_31 , text="1mm-500mm", font=('Arial', 9), bg='white').pack(side="left", padx=(0, 40))
+        tk.Label(self.pln_frame_31 , text="1mm-500mm", font=(UI_FONT_FAMILY, 9), bg='white').pack(side="left", padx=(0, 40))
 
-        tk.Label(self.pln_frame_31 , text="指定末端位置姿态：", font=('Arial', 9), bg='white').pack(side="left", padx=(5, 0))
-        self.pln_speed_entry_3 = tk.Entry(self.pln_frame_31 , width=50, font=('Arial', 9), justify='center')
+        tk.Label(self.pln_frame_31 , text="指定末端位置姿态：", font=(UI_FONT_FAMILY, 9), bg='white').pack(side="left", padx=(5, 0))
+        self.pln_speed_entry_3 = tk.Entry(self.pln_frame_31 , width=50, font=(UI_FONT_FAMILY, 9), justify='center')
         self.pln_speed_entry_3.pack(side="left")
         self.pln_speed_entry_3.insert(0, "0,0,0,0,0,0")
-        # tk.Label(self.pln_frame_31 , text="", font=('Arial', 9), bg='white').pack(side="left", padx=(0, 10))
+        # tk.Label(self.pln_frame_31 , text="", font=(UI_FONT_FAMILY, 9), bg='white').pack(side="left", padx=(0, 10))
 
         self.pln_frame_311 = tk.Frame(pln_window, bg="white")
         self.pln_frame_311.pack(fill='x')
-        tk.Label(self.pln_frame_311, text="单步", font=('Arial', 9), bg='white').grid(row=0, column=0, padx=(5, 5),pady=5)
+        tk.Label(self.pln_frame_311, text="单步", font=(UI_FONT_FAMILY, 9), bg='white').grid(row=0, column=0, padx=(5, 5),pady=5)
         bt1_x_p = tk.Button(self.pln_frame_311, text="x+",command=lambda :self.pln_movla('x+'))
         bt1_x_p.grid(row=0, column=1, padx=(5, 5),pady=5)
         bt1_y_p = tk.Button(self.pln_frame_311, text="y+",command=lambda :self.pln_movla('y+'))
@@ -5299,7 +5368,7 @@ class App:
         bt1_z_p = tk.Button(self.pln_frame_311, text="z+",command=lambda :self.pln_movla('z+'))
         bt1_z_p.grid(row=0, column=3, padx=(5, 5))
 
-        tk.Label(self.pln_frame_311, text="单步", font=('Arial', 9), bg='white').grid(row=1, column=0, padx=(5, 5),pady=5)
+        tk.Label(self.pln_frame_311, text="单步", font=(UI_FONT_FAMILY, 9), bg='white').grid(row=1, column=0, padx=(5, 5),pady=5)
         bt1_x1_p = tk.Button(self.pln_frame_311, text="x+",command=lambda :self.pln_movla('x-'))
         bt1_x1_p.grid(row=1, column=1, padx=(5, 5))
         bt1_y1_p = tk.Button(self.pln_frame_311, text="y-",command=lambda :self.pln_movla('y-'))
@@ -5315,24 +5384,24 @@ class App:
         self.pln_frame_4.pack(fill="x", padx=5, pady=(20, 10))
         #显示当前关节和当前xyzabc
         self.arm_text_2 = tk.Label(self.pln_frame_4, text="两个关节走直线", bg="#2196F3",
-                                        fg="white", font=("Arial", 10, "bold"))
+                                        fg="white", font=(UI_FONT_FAMILY, 10, "bold"))
         self.arm_text_2.pack(fill='x')
 
         self.pln_frame_41 = tk.Frame(pln_window, bg="white")
         self.pln_frame_41.pack(fill="x", padx=5, pady=(10, 5))
         # 点动距离，速度
-        tk.Label(self.pln_frame_41, text="规划速度：", font=('Arial', 9), bg='white').pack(side="left", padx=(0, 0))
-        self.pln_speed_entry_4 = tk.Entry(self.pln_frame_41, width=5, font=('Arial', 9), justify='center')
+        tk.Label(self.pln_frame_41, text="规划速度：", font=(UI_FONT_FAMILY, 9), bg='white').pack(side="left", padx=(0, 0))
+        self.pln_speed_entry_4 = tk.Entry(self.pln_frame_41, width=5, font=(UI_FONT_FAMILY, 9), justify='center')
         self.pln_speed_entry_4.pack(side="left")
         self.pln_speed_entry_4.insert(0, "100")
-        tk.Label(self.pln_frame_41, text="1mm/s-500mm/s", font=('Arial', 9), bg='white').pack(side="left", padx=(0, 40))
+        tk.Label(self.pln_frame_41, text="1mm/s-500mm/s", font=(UI_FONT_FAMILY, 9), bg='white').pack(side="left", padx=(0, 40))
 
-        tk.Label(self.pln_frame_41, text="指定终点关节：", font=('Arial', 9), bg='white').pack(side="left",
+        tk.Label(self.pln_frame_41, text="指定终点关节：", font=(UI_FONT_FAMILY, 9), bg='white').pack(side="left",
                                                                                                   padx=(5, 0))
-        self.pln_speed_entry_5 = tk.Entry(self.pln_frame_41, width=50, font=('Arial', 9), justify='center')
+        self.pln_speed_entry_5 = tk.Entry(self.pln_frame_41, width=50, font=(UI_FONT_FAMILY, 9), justify='center')
         self.pln_speed_entry_5.pack(side="left")
         self.pln_speed_entry_5.insert(0, "0,0,0,0,0,0,0")
-        # tk.Label(self.pln_frame_41 , text="角度", font=('Arial', 9), bg='white').pack(side="left", padx=(0, 10))
+        # tk.Label(self.pln_frame_41 , text="角度", font=(UI_FONT_FAMILY, 9), bg='white').pack(side="left", padx=(0, 10))
 
         tk.Button(self.pln_frame_41, text="直线运行的到指定关节构型", command=lambda: self.pln_movlkeepj).pack(side="left", padx=(0, 10))
 
@@ -5516,7 +5585,7 @@ class App:
 
         title_identy_tool_frame = tk.Frame(main_frame, bg="white")
         title_identy_tool_frame.pack(fill="x", pady=(0, 10))
-        title_label = tk.Label(title_identy_tool_frame, text="工具动力学辨识", bg='white',font=("Arial", 14, "italic"))
+        title_label = tk.Label(title_identy_tool_frame, text="工具动力学辨识", bg='white',font=(UI_FONT_FAMILY, 14, "italic"))
         title_label.pack(fill='x',pady=(5,5))
 
         # ============ 第一行：标题和文件选择 ============
@@ -5544,7 +5613,7 @@ class App:
         # 文件路径显示
         self.file_path_tool = tk.StringVar()  # 如果需要在类中访问，可以定义为实例变量
         self.path_tool = tk.Entry(identy_tool_frame, textvariable=self.file_path_tool, width=60,
-                             font=("Arial", 8), state="readonly")
+                             font=(UI_FONT_FAMILY, 8), state="readonly")
         self.path_tool.grid(row=0, column=4, padx=5, sticky="ew")
 
         # 配置列权重，让路径输入框扩展
@@ -5662,7 +5731,7 @@ class App:
         title_tool_set_text_frame = tk.Frame(main_frame, bg="white")
         title_tool_set_text_frame.pack(fill="x", pady=(0, 10))
 
-        title_tool_label = tk.Label(title_tool_set_text_frame, text="工具参数设置", bg='white',font=("Arial", 14, "italic"))
+        title_tool_label = tk.Label(title_tool_set_text_frame, text="工具参数设置", bg='white',font=(UI_FONT_FAMILY, 14, "italic"))
         title_tool_label.pack(fill='x',pady=(5,5))
 
         #right
@@ -6963,14 +7032,16 @@ if __name__ == "__main__":
     if not ini_result1 or not ini_result2:
         messagebox.showerror('error', 'config/*.MvKDCfg 出错，请检查文件内容或路径')
     root = tk.Tk()
+    configure_ui_fonts(root)
 
     style = ttk.Style()
 
     style.configure(
         "MyCustom.TLabelframe",
-        font=("Arial", 12, "italic"),  # 字体
+        font=(UI_FONT_FAMILY, 12, "italic"),  # 字体
         foreground="darkblue",  # 文字颜色
         background="white"  # 标签背景色
     )
     app = App(root)
+    apply_font_to_widget_tree(root)
     root.mainloop()
