@@ -2,8 +2,9 @@
 .vs/
 .idea/
 .vscode/
-*.pyc
+*.py[cod]
 __pycache__/
+*$py.class
 kinematicsSDK/test.txt
 kinematicsSDK/testkj.txt
 test.txt
