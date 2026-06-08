@@ -41,6 +41,10 @@ AXIS_MAP = [2, 0, 1, 5, 3, 4]
 AXIS_SIGNS = [1, -1, 1, -1, 1, 1]
 AXIS_ENABLE = [1, 1, 1, 0, 0, 0]
 
+# SpaceMouse left button is usually button 0. Motion commands are only sent
+# while this button is held.
+DEADMAN_BUTTON = 0
+
 # Increment scaling and clamps. Translation is meters per cycle, rotation is
 # radians per cycle after so(3) mapping.
 TRANSLATION_SCALE = 0.0004 / 350.0
@@ -49,10 +53,10 @@ MAX_TRANSLATION_PER_CYCLE = 0.001
 MAX_ROTATION_PER_CYCLE = 0.01
 EMA_ALPHA = 1.0
 
-# Workspace limits in robot base frame, meters. The startup FK pose is clamped
-# only after applying user increments, so out-of-range IK is skipped safely.
-WORKSPACE_MIN = [-0.5, -0.5, 0.0]
-WORKSPACE_MAX = [0.5, 0.5, 0.7]
+# Workspace limits in robot base frame, meters. Targets outside this box are
+# rejected; they are not clamped back to the boundary.
+WORKSPACE_MIN = [-2.0, -2.0, -2.0]
+WORKSPACE_MAX = [2.0, 2.0, 2.0]
 
 # Status logging.
 TELEMETRY_INTERVAL_S = 0.5

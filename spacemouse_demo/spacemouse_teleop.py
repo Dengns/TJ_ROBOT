@@ -104,15 +104,27 @@ class CartesianPoseTarget:
         self.position = np.zeros(3, dtype=np.float64)
         self.orientation_wxyz = np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float64)
 
-    def apply_increment(self, delta_vec3_m: np.ndarray, delta_quat_wxyz: np.ndarray) -> None:
-        self.position += np.asarray(delta_vec3_m, dtype=np.float64)
+    def candidate_with_increment(
+        self,
+        delta_vec3_m: np.ndarray,
+        delta_quat_wxyz: np.ndarray,
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        position = self.position + np.asarray(delta_vec3_m, dtype=np.float64)
+        orientation = quat_normalize_wxyz(quat_multiply_wxyz(self.orientation_wxyz, delta_quat_wxyz))
+        return position, orientation
+
+    def set_pose(self, position_m: np.ndarray, quat_wxyz: np.ndarray) -> None:
+        self.position = np.asarray(position_m, dtype=np.float64)
         self.orientation_wxyz = quat_normalize_wxyz(
-            quat_multiply_wxyz(self.orientation_wxyz, delta_quat_wxyz)
+            np.asarray(quat_wxyz, dtype=np.float64)
         )
 
-    def clamp_position_to_workspace(self) -> None:
-        for i in range(3):
-            self.position[i] = np.clip(self.position[i], cfg.WORKSPACE_MIN[i], cfg.WORKSPACE_MAX[i])
+    @staticmethod
+    def is_position_in_workspace(position_m: np.ndarray) -> bool:
+        return bool(
+            np.all(np.asarray(position_m, dtype=np.float64) >= np.asarray(cfg.WORKSPACE_MIN, dtype=np.float64))
+            and np.all(np.asarray(position_m, dtype=np.float64) <= np.asarray(cfg.WORKSPACE_MAX, dtype=np.float64))
+        )
 
 
 class SpatialIncrementComputer:
@@ -126,6 +138,11 @@ class SpatialIncrementComputer:
 
     def reset_rotation_measurement_anchor(self) -> None:
         self._meas_quat_prev = np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float64)
+
+    def reset_filter_state(self) -> None:
+        self._ema_translation = np.zeros(3, dtype=np.float64)
+        self._ema_rotation = np.zeros(3, dtype=np.float64)
+        self.reset_rotation_measurement_anchor()
 
     def compute(self, vec3_device: np.ndarray, quat_wxyz: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         mapped_translation = np.array(
@@ -284,14 +301,25 @@ class SpaceMouseMarvinTeleop:
         period_s = 1.0 / float(self.control_rate_hz)
         while True:
             t0 = time.monotonic()
+            if not self.mouse.get_button(cfg.DEADMAN_BUTTON):
+                self._increments.reset_filter_state()
+                self._sleep_until_period(t0, period_s)
+                continue
             vec3, quat_wxyz = self.mouse.get_vec3_quaternion_wxyz(
                 translation_scale=cfg.SM_VEC3_TRANSLATION_SCALE,
                 rotation_mode=cfg.SM_QUAT_ROTATION_MODE,
                 rotation_rad_per_unit=cfg.SM_QUAT_ROTATION_RAD_PER_UNIT,
             )
             dvec, dq = self._increments.compute(vec3, quat_wxyz)
-            self.pose.apply_increment(dvec, dq)
-            self.pose.clamp_position_to_workspace()
+            candidate_position, candidate_orientation = self.pose.candidate_with_increment(dvec, dq)
+            if not self.pose.is_position_in_workspace(candidate_position):
+                logger.warning(
+                    "Workspace limit reached; stop command. target_m=%s",
+                    np.round(candidate_position, 4).tolist(),
+                )
+                self._sleep_until_period(t0, period_s)
+                continue
+            self.pose.set_pose(candidate_position, candidate_orientation)
             self._maybe_log_telemetry(vec3, quat_wxyz, dvec, dq, time.monotonic())
             self._send_ik_position_command()
             self._sleep_until_period(t0, period_s)

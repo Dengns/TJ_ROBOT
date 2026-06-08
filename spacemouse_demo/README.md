@@ -62,7 +62,9 @@ MARVIN_ROBOT_IP=192.168.1.190 MARVIN_ARM=A python3 spacemouse_demo/spacemouse_te
 
 - 默认 `A` 臂，关节位置模式，`VEL_RATIO=10`，`ACC_RATIO=10`。
 - 启动后先订阅当前反馈关节，用 FK 对齐当前 TCP，再开始累积 SpaceMouse 增量。
+- 必须按住 SpaceMouse 左键（默认 button `0`）才会累积位姿增量并下发运动指令。
 - IK 无解、目标超工作空间、关节超限、奇异或订阅失败时，本周期跳过下发。
+- 工作空间超限时不会把目标裁剪到边界，而是停止本周期运动指令。
 - 默认只打开平移轴，旋转轴在 `config.py` 的 `AXIS_ENABLE` 里关闭；确认方向后再逐步打开。
 - 第一次有机械臂测试时，先用很低速度，只推动单轴，确认轴向和比例正确后再扩大动作。
 - `Ctrl+C` 会停止 SpaceMouse、下使能当前手臂并释放机器人连接。
