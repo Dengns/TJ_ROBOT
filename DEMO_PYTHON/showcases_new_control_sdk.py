@@ -45,7 +45,8 @@ def case2_position():
     if arm=='B':
         idx=1
     joints1=[0]*7
-    joints2=[9.22, -40.58, -43.89, -102.09, 128.44, 17.55, -28.35]
+    joints2=[0]*7
+    # joints2=[9.22, -40.58, -43.89, -102.09, 128.44, 17.55, -28.35]
 
     ''' initialize subscribe structure '''
     dcss = DCSS()
@@ -97,8 +98,8 @@ def case2_position():
 
 def case3_position_two_arms():
     '''define parameters'''
-    vel=50
-    acc=50
+    vel=10
+    acc=10
     joints1=[0]*7
     joints2=[9.22, -40.58, -43.89, -102.09, 128.44, 17.55, -28.35]
 
@@ -167,12 +168,12 @@ def case3_position_two_arms():
 def case4_impedance_joint():
     '''define parameters'''
     arm='A'
-    vel=50
-    acc=50
+    vel=20
+    acc=20
     k= [10, 10, 10, 1.6, 1, 1, 1]
     d = [0.8, 0.8, 0.8, 0.4, 0.4, 0.4, 0.4]
     joints1=[0]*7
-    joints2=[9.22, -40.58, -43.89, -102.09, 128.44, 17.55, -28.35]
+    joints2=[9.22, -40.58, -43.89, -102.09, 128.44, 17.55, -20.35]
     idx =0
     if arm=='B':
         idx=1
@@ -230,8 +231,8 @@ def case4_impedance_joint():
 def case5_impedance_cart():
     '''define parameters'''
     arm='A'
-    vel=20
-    acc=20
+    vel=10
+    acc=10
     k= [3000, 3000, 3000, 100, 100, 100, 1]
     d = [0.8, 0.8, 0.8, 0.4, 0.4, 0.4, 0.4]
     rot_type=0
@@ -571,8 +572,10 @@ def case9_run_pln_joint_space(config_path="ccs_m6_40.MvKDCfg"):
 def case10_run_pln_cart_space(config_path="ccs_m6_40.MvKDCfg"):
     '''define parameters'''
     arm='A'
-    pln_vel = 0.5
-    pln_acc = 0.5
+    pln_vel = 0.3
+    pln_acc = 0.3
+    cart_vel = 100
+    cart_acc = 300
     start_joint= [44.04, -62.57, -8.92, -57.21, 1.45, -4.39, 2.1]
     idx =0
     if arm=='B':
@@ -589,30 +592,10 @@ def case10_run_pln_cart_space(config_path="ccs_m6_40.MvKDCfg"):
         logger.error("--- connect failed ---")
         return False
 
-    ''' if robot not at start joints planing to start joints '''
-    sub_data=robot.subscribe(dcss)
-    current_joints = sub_data['outputs'][idx]['fb_joint_pos']
-    if not check_joints_reached(current_joints,start_joint):
-        ''' joint space PLN initialize'''
-        if not robot.pln_init(path=config_path):
-            logger.error("--- initialize pln failed ---")
-            return False
-
-        while 1:
-            sub_data = robot.subscribe(dcss)
-            if sub_data['outputs'][idx]['traj_state'][0]==0:
-                break
-            time.sleep(0.001)
-        if not robot.run_pln_joint(arm=arm, start_joints=current_joints, stop_joints=start_joint,
-                            vel_ratio=pln_vel,acc_ratio=pln_acc):
-            logger.error("--- pln failed ---")
-            return False
-        while 1:
-            sub_data = robot.subscribe(dcss)
-            fb_joints = sub_data['outputs'][idx]['fb_joint_pos']
-            if sub_data['outputs'][idx]['low_speed_flag'][0] == 1 or check_joints_reached(fb_joints, start_joint):
-                break
-            time.sleep(0.001)
+    ''' initialize cartesian planner only; do not move to a hard-coded start pose '''
+    if not robot.pln_init(path=config_path):
+        logger.error("--- initialize pln failed ---")
+        return False
 
     '''kinematics sdk'''
     kk = Marvin_Kine()
@@ -623,7 +606,10 @@ def case10_run_pln_cart_space(config_path="ccs_m6_40.MvKDCfg"):
         dh=ini_result['DH'][0],
         pnva=ini_result['PNVA'][0],
         j67=ini_result['BD'][0])
-    fk_mat = kk.fk(joints=start_joint)
+    sub_data = robot.subscribe(dcss)
+    current_joints = sub_data['outputs'][idx]['fb_joint_pos']
+    logger.info(f"cartesian planning start joints: {current_joints}")
+    fk_mat = kk.fk(joints=current_joints)
     if not fk_mat:
         logger.info("kk.fk failes")
         return False
@@ -632,12 +618,10 @@ def case10_run_pln_cart_space(config_path="ccs_m6_40.MvKDCfg"):
     '''矩形框yz平面'''
     '''z+200'''
     pose_6d_end = pose_6d_start.copy()
-    pose_6d_end[2] += 200
+    pose_6d_end[2] += 20
     '''MOVLA'''
-    sub_data=robot.subscribe(dcss)
-    current_joints = sub_data['outputs'][idx]['fb_joint_pos']
     points, pset = kk.movLA(start_xyzabc=pose_6d_start, end_xyzabc=pose_6d_end,
-                            ref_joints=current_joints, vel=1000, acc=1000, freq_hz=50)
+                            ref_joints=current_joints, vel=cart_vel, acc=cart_acc, freq_hz=50)
     if pset:
         '''run cart pln'''
         if not robot.run_pln_cart(arm=arm, pset=pset):
@@ -654,12 +638,12 @@ def case10_run_pln_cart_space(config_path="ccs_m6_40.MvKDCfg"):
     '''y-200'''
     pose_6d_start = pose_6d_end.copy()
     pose_6d_end = pose_6d_start.copy()
-    pose_6d_end[1] -= 200  # Y方向移动200mm
+    pose_6d_end[1] -= 20  # Y方向移动20mm
     '''直线规划（MOVLA）'''
     sub_data=robot.subscribe(dcss)
     current_joints = sub_data['outputs'][idx]['fb_joint_pos']
     points, pset = kk.movLA(start_xyzabc=pose_6d_start, end_xyzabc=pose_6d_end,
-                            ref_joints=current_joints, vel=1000, acc=1000, freq_hz=50)
+                            ref_joints=current_joints, vel=cart_vel, acc=cart_acc, freq_hz=50)
     if pset:
         '''run cart pln'''
         if not robot.run_pln_cart(arm=arm, pset=pset):
@@ -676,12 +660,12 @@ def case10_run_pln_cart_space(config_path="ccs_m6_40.MvKDCfg"):
     '''z-200'''
     pose_6d_start = pose_6d_end.copy()
     pose_6d_end = pose_6d_start.copy()
-    pose_6d_end[2] -= 200  # z方向移动200mm
+    pose_6d_end[2] -= 20  # z方向移动20mm
     '''直线规划（MOVLA）'''
     sub_data=robot.subscribe(dcss)
     current_joints = sub_data['outputs'][idx]['fb_joint_pos']
     points, pset = kk.movLA(start_xyzabc=pose_6d_start, end_xyzabc=pose_6d_end,
-                            ref_joints=current_joints, vel=1000, acc=1000, freq_hz=50)
+                            ref_joints=current_joints, vel=cart_vel, acc=cart_acc, freq_hz=50)
     if pset:
         '''run cart pln'''
         if not robot.run_pln_cart(arm=arm, pset=pset):
@@ -698,12 +682,12 @@ def case10_run_pln_cart_space(config_path="ccs_m6_40.MvKDCfg"):
     '''y+200'''
     pose_6d_start = pose_6d_end.copy()
     pose_6d_end = pose_6d_start.copy()
-    pose_6d_end[1] += 200  # Y方向移动200mm
+    pose_6d_end[1] += 20  # Y方向移动20mm
     '''直线规划（MOVLA）'''
     sub_data=robot.subscribe(dcss)
     current_joints = sub_data['outputs'][idx]['fb_joint_pos']
     points, pset = kk.movLA(start_xyzabc=pose_6d_start, end_xyzabc=pose_6d_end,
-                            ref_joints=current_joints, vel=1000, acc=1000, freq_hz=50)
+                            ref_joints=current_joints, vel=cart_vel, acc=cart_acc, freq_hz=50)
     if pset:
         '''run cart pln'''
         if not robot.run_pln_cart(arm=arm, pset=pset):
@@ -863,7 +847,7 @@ if __name__=="__main__":
     '''showcase10: In cartesian space: planning rectangular movement from the starting point.'''
     # logger.info("--------------------------")
     # logger.info("showcase: In cartesian space: planning rectangular movement from the starting point.")
-    # case10_run_pln_cart_space(config_path="ccs_m6_40.MvKDCfg")
+    case10_run_pln_cart_space(config_path="ccs_m6_40.MvKDCfg")
 
     '''showcase11: set End-effector tools info :kinematics and dynamics'''
     # logger.info("--------------------------")

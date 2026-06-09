@@ -161,11 +161,18 @@ class SpaceMouseReader:
     def open(self) -> None:
         if self._lib.spnav_open() == -1:
             raise RuntimeError("Cannot connect to spacenavd. Is the daemon running?")
+        dev_name = getattr(self._lib, "spnav_dev_name", None)
+        dev_axes = getattr(self._lib, "spnav_dev_axes", None)
+        dev_buttons = getattr(self._lib, "spnav_dev_buttons", None)
+        if dev_name is None or dev_axes is None or dev_buttons is None:
+            print("SpaceMouse connected.")
+            return
+
         buf = ctypes.create_string_buffer(256)
-        self._lib.spnav_dev_name(buf, 256)
+        dev_name(buf, 256)
         name = buf.value.decode(errors="replace")
-        axes = self._lib.spnav_dev_axes()
-        buttons = self._lib.spnav_dev_buttons()
+        axes = dev_axes()
+        buttons = dev_buttons()
         print(f"SpaceMouse connected: {name} (axes={axes}, buttons={buttons})")
 
     def start(self) -> None:
