@@ -1,5 +1,6 @@
 import csv
 import logging
+import math
 import os
 import sys
 import time
@@ -8,18 +9,24 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
 sys.path.insert(0, parent_dir)
 
-from SDK_PYTHON.fx_kine import Marvin_Kine
+from SDK_PYTHON.fx_kine import FX_InvKineSolvePara, Marvin_Kine
 from SDK_PYTHON.fx_robot import Concise_Marvin_Robot, DCSS
 
 
 logging.basicConfig(format="%(message)s")
-logger = logging.getLogger("case10_cartesian_debug")
+logger = logging.getLogger("case10_cartesian_direct_cmd")
 logger.setLevel(logging.DEBUG)
 
 ROBOT_IP = "192.168.1.190"
 CONFIG_PATH = os.path.join(current_dir, "ccs_m6_40.MvKDCfg")
-CSV_PATH = os.path.join(current_dir, "cartesian_motion_log.csv")
-PLOT_PATH = os.path.join(current_dir, "cartesian_motion_plot.png")
+CSV_PATH = os.path.join(current_dir, "cartesian_direct_cmd_log.csv")
+PLOT_PATH = os.path.join(current_dir, "cartesian_direct_cmd_plot.png")
+
+
+def check_joints_reached(current_joints, target_joints, tolerance=1.0):
+    if len(current_joints) != 7 or len(target_joints) != 7:
+        return False
+    return all(abs(cur - tgt) < tolerance for cur, tgt in zip(current_joints, target_joints))
 
 
 class CartesianRecorder:
@@ -42,7 +49,7 @@ class CartesianRecorder:
         t = now - self.t0
 
         joints = sub_data["outputs"][self.idx]["fb_joint_pos"]
-        traj_state = sub_data["outputs"][self.idx]["traj_state"][0]
+        low_speed_flag = sub_data["outputs"][self.idx]["low_speed_flag"][0]
         fk_mat = self.kk.fk(joints=joints)
         if not fk_mat:
             return
@@ -56,7 +63,7 @@ class CartesianRecorder:
         else:
             target_pos = self.target_pos
             err = [target_pos[i] - pos[i] for i in range(3)]
-            err_norm = sum(value * value for value in err) ** 0.5
+            err_norm = math.sqrt(sum(value * value for value in err))
 
         if self.prev_t is None:
             vel = [0.0, 0.0, 0.0]
@@ -64,10 +71,9 @@ class CartesianRecorder:
         else:
             dt = max(t - self.prev_t, 1e-6)
             vel = [(pos[i] - self.prev_pos[i]) / dt for i in range(3)]
-            if self.prev_vel is None:
-                acc = [0.0, 0.0, 0.0]
-            else:
-                acc = [(vel[i] - self.prev_vel[i]) / dt for i in range(3)]
+            acc = [0.0, 0.0, 0.0] if self.prev_vel is None else [
+                (vel[i] - self.prev_vel[i]) / dt for i in range(3)
+            ]
 
         self.records.append(
             {
@@ -88,7 +94,7 @@ class CartesianRecorder:
                 "err_y_mm": err[1],
                 "err_z_mm": err[2],
                 "err_norm_mm": err_norm,
-                "traj_state": traj_state,
+                "low_speed_flag": low_speed_flag,
                 "segment_id": self.segment_id,
             }
         )
@@ -97,17 +103,8 @@ class CartesianRecorder:
         self.prev_vel = vel
 
     def mark_event(self, name, segment_id):
-        if self.t0 is None:
-            event_time = 0.0
-        else:
-            event_time = time.perf_counter() - self.t0
-        self.events.append(
-            {
-                "time_s": event_time,
-                "name": name,
-                "segment_id": segment_id,
-            }
-        )
+        event_time = 0.0 if self.t0 is None else time.perf_counter() - self.t0
+        self.events.append({"time_s": event_time, "name": name, "segment_id": segment_id})
 
     def set_target_pose(self, target_pose):
         self.target_pos = target_pose[:3]
@@ -117,9 +114,8 @@ class CartesianRecorder:
             logger.warning("no cartesian records to save")
             return
 
-        fieldnames = list(self.records[0].keys())
         with open(path, "w", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer = csv.DictWriter(f, fieldnames=list(self.records[0].keys()))
             writer.writeheader()
             writer.writerows(self.records)
         logger.info(f"saved cartesian csv: {path}")
@@ -151,20 +147,11 @@ class CartesianRecorder:
         err_z = [r["err_z_mm"] for r in self.records]
         err_norm = [r["err_norm_mm"] for r in self.records]
 
-        series = {
-            "X": (x, vx, ax),
-            "Y": (y, vy, ay),
-            "Z": (z, vz, az),
-        }
-        columns = [
-            ("Position", "mm"),
-            ("Velocity", "mm/s"),
-            ("Acceleration", "mm/s^2"),
-        ]
-
+        series = {"X": (x, vx, ax), "Y": (y, vy, ay), "Z": (z, vz, az)}
+        columns = [("Position", "mm"), ("Velocity", "mm/s"), ("Acceleration", "mm/s^2")]
         event_styles = {
-            "command_sent": {"color": "tab:green", "linestyle": "--", "label": "command sent"},
-            "traj_running": {"color": "tab:orange", "linestyle": "-.", "label": "trajectory running"},
+            "command_sent": {"color": "tab:green", "linestyle": "--", "label": "joint command sent"},
+            "motion_started": {"color": "tab:blue", "linestyle": "-.", "label": "motion started"},
             "segment_done": {"color": "tab:red", "linestyle": ":", "label": "segment done"},
         }
 
@@ -206,7 +193,6 @@ class CartesianRecorder:
             for style in event_styles.values()
         ]
         fig.legend(handles=legend_handles, loc="upper center", ncol=3)
-
         fig.tight_layout()
         fig.subplots_adjust(top=0.92)
         fig.savefig(path, dpi=150)
@@ -245,84 +231,89 @@ class CartesianRecorder:
         logger.info(f"saved cartesian error plot: {err_path}")
 
 
-def wait_robot_ready(robot, dcss, idx, stable_samples=10, timeout_s=5.0):
+def solve_ik(kk, target_pose, ref_joints):
+    target_mat = kk.xyzabc_to_mat4x4(target_pose)
+    if not target_mat:
+        logger.error("--- target pose to matrix failed ---")
+        return None
+
+    sp = FX_InvKineSolvePara()
+    sp.set_input_ik_target_tcp(kk.mat4x4_to_mat1x16(target_mat))
+    sp.set_input_ik_ref_joint(ref_joints)
+
+    result = kk.ik(structure_data=sp)
+    if not result:
+        logger.error("--- ik failed ---")
+        return None
+    if result.m_Output_IsOutRange or result.m_Output_IsJntExd:
+        logger.error(
+            f"--- ik unsafe: out_range={result.m_Output_IsOutRange}, "
+            f"joint_exceed={result.m_Output_IsJntExd}, tags={list(result.m_Output_JntExdTags)} ---"
+        )
+        return None
+
+    return result.m_Output_RetJoint.to_list()
+
+
+def wait_joint_target(robot, kk, dcss, idx, target_joints, recorder, segment_id, timeout_s=10.0):
     start = time.perf_counter()
-    stable_count = 0
+    start_pos = None
+    motion_marked = False
+
     while True:
-        data = robot.subscribe(dcss)
-        traj_idle = data["outputs"][idx]["traj_state"][0] == 0
-        if traj_idle:
-            stable_count += 1
-            if stable_count >= stable_samples:
-                return True
-        else:
-            stable_count = 0
+        sub_data = robot.subscribe(dcss)
+        recorder.sample(sub_data)
+
+        current_joints = sub_data["outputs"][idx]["fb_joint_pos"]
+        current_record = recorder.records[-1]
+        current_pos = [current_record["x_mm"], current_record["y_mm"], current_record["z_mm"]]
+        if start_pos is None:
+            start_pos = current_pos
+
+        displacement = math.sqrt(sum((current_pos[i] - start_pos[i]) ** 2 for i in range(3)))
+        if not motion_marked and displacement > 0.1:
+            recorder.mark_event("motion_started", segment_id)
+            motion_marked = True
+
+        if check_joints_reached(current_joints, target_joints, tolerance=1.0):
+            recorder.mark_event("segment_done", segment_id)
+            return True
 
         if time.perf_counter() - start > timeout_s:
-            logger.error("--- robot ready wait timeout ---")
+            logger.error("--- wait joint target timeout ---")
+            recorder.mark_event("segment_done", segment_id)
             return False
+
         time.sleep(0.001)
 
 
-def wait_cart_pln_done(robot, dcss, idx, recorder=None, segment_id=None):
-    running_marked = False
-    while True:
-        data = robot.subscribe(dcss)
-        if recorder is not None:
-            recorder.sample(data)
-            if (
-                segment_id is not None
-                and not running_marked
-                and data["outputs"][idx]["traj_state"][0] != 0
-            ):
-                recorder.mark_event("traj_running", segment_id)
-                running_marked = True
-        if data["outputs"][idx]["traj_state"][0] == 0:
-            break
-        time.sleep(0.001)
-
-
-def run_cart_segment(robot, kk, dcss, arm, idx, start_pose, end_pose, vel, acc, recorder):
+def run_direct_segment(robot, kk, dcss, arm, idx, target_pose, recorder):
     recorder.segment_id += 1
     segment_id = recorder.segment_id
+
     sub_data = robot.subscribe(dcss)
-    current_joints = sub_data["outputs"][idx]["fb_joint_pos"]
-    logger.info(f"segment {segment_id} ref joints: {current_joints}")
+    ref_joints = sub_data["outputs"][idx]["fb_joint_pos"]
+    logger.info(f"segment {segment_id} ik ref joints: {ref_joints}")
 
-    points, pset = kk.movLA(
-        start_xyzabc=start_pose,
-        end_xyzabc=end_pose,
-        ref_joints=current_joints,
-        vel=vel,
-        acc=acc,
-        freq_hz=50,
-    )
-    logger.info(f"planned points: {len(points) if points else 0}")
-
-    if not pset:
-        logger.error("--- movLA failed ---")
+    target_joints = solve_ik(kk, target_pose, ref_joints)
+    if target_joints is None:
         return False
+    logger.info(f"segment {segment_id} target joints: {target_joints}")
+    recorder.set_target_pose(target_pose)
 
-    if not wait_robot_ready(robot, dcss, idx):
-        return False
-
-    recorder.set_target_pose(end_pose)
-    if not robot.run_pln_cart(arm=arm, pset=pset):
-        logger.error("--- run cart pln failed ---")
+    if not robot.set_joint_position_cmd(arm=arm, joint=target_joints):
+        logger.error("--- set joint target failed ---")
         return False
 
     recorder.mark_event("command_sent", segment_id)
-    logger.info("recording starts after run_pln_cart")
-    wait_cart_pln_done(robot, dcss, idx, recorder, segment_id)
-    recorder.mark_event("segment_done", segment_id)
-    return True
+    return wait_joint_target(robot, kk, dcss, idx, target_joints, recorder, segment_id)
 
 
 def main():
     arm = "A"
     idx = 0 if arm == "A" else 1
-    cart_vel = 100
-    cart_acc = 100
+    joint_vel_ratio = 20
+    joint_acc_ratio = 20
     distance_mm = 20
 
     dcss = DCSS()
@@ -333,10 +324,6 @@ def main():
         return False
 
     try:
-        if not robot.pln_init(path=CONFIG_PATH):
-            logger.error("--- initialize pln failed ---")
-            return False
-
         kk = Marvin_Kine()
         kk.log_switch(0)
         ini_result = kk.load_config(arm_type=0, config_path=CONFIG_PATH)
@@ -347,9 +334,14 @@ def main():
             j67=ini_result["BD"][0],
         )
 
+        if not robot.set_position_state(arm=arm, velRatio=joint_vel_ratio, AccRatio=joint_acc_ratio):
+            logger.error("--- switch to position failed ---")
+            return False
+        time.sleep(0.5)
+
         sub_data = robot.subscribe(dcss)
         current_joints = sub_data["outputs"][idx]["fb_joint_pos"]
-        logger.info(f"cartesian planning start joints: {current_joints}")
+        logger.info(f"cartesian direct start joints: {current_joints}")
 
         fk_mat = kk.fk(joints=current_joints)
         if not fk_mat:
@@ -357,37 +349,31 @@ def main():
             return False
 
         pose_start = kk.mat4x4_to_xyzabc(pose_mat=fk_mat)
-        logger.info(f"cartesian planning start pose: {pose_start}")
+        logger.info(f"cartesian direct start pose: {pose_start}")
         recorder = CartesianRecorder(kk=kk, idx=idx)
 
-        # Four small Cartesian segments in the YZ plane:
-        # Z+, Y-, Z-, Y+.
-        pose_end = pose_start.copy()
-        pose_end[2] += distance_mm
-        if not run_cart_segment(robot, kk, dcss, arm, idx, pose_start, pose_end, cart_vel, cart_acc, recorder):
+        target_pose = pose_start.copy()
+        target_pose[2] += distance_mm
+        if not run_direct_segment(robot, kk, dcss, arm, idx, target_pose, recorder):
             return False
 
-        pose_start = pose_end.copy()
-        pose_end = pose_start.copy()
-        pose_end[1] -= distance_mm
-        if not run_cart_segment(robot, kk, dcss, arm, idx, pose_start, pose_end, cart_vel, cart_acc, recorder):
+        target_pose = target_pose.copy()
+        target_pose[1] -= distance_mm
+        if not run_direct_segment(robot, kk, dcss, arm, idx, target_pose, recorder):
             return False
 
-        pose_start = pose_end.copy()
-        pose_end = pose_start.copy()
-        pose_end[2] -= distance_mm
-        if not run_cart_segment(robot, kk, dcss, arm, idx, pose_start, pose_end, cart_vel, cart_acc, recorder):
+        target_pose = target_pose.copy()
+        target_pose[2] -= distance_mm
+        if not run_direct_segment(robot, kk, dcss, arm, idx, target_pose, recorder):
             return False
 
-        pose_start = pose_end.copy()
-        pose_end = pose_start.copy()
-        pose_end[1] += distance_mm
-        if not run_cart_segment(robot, kk, dcss, arm, idx, pose_start, pose_end, cart_vel, cart_acc, recorder):
+        target_pose = target_pose.copy()
+        target_pose[1] += distance_mm
+        if not run_direct_segment(robot, kk, dcss, arm, idx, target_pose, recorder):
             return False
 
         recorder.save_csv(CSV_PATH)
         recorder.save_plot(PLOT_PATH)
-
         return True
     finally:
         time.sleep(1)

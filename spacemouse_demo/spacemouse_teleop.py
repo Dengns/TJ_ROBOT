@@ -214,12 +214,17 @@ class SpaceMouseMarvinTeleop:
         self.robot: Optional[Concise_Marvin_Robot] = None
         self.kine: Optional[Marvin_Kine] = None
         self._closed = False
+        self._deadman_was_pressed = False
 
     def setup(self) -> None:
         self._setup_kinematics()
         self._setup_robot()
         self._setup_mouse()
         self._seed_pose_from_current_fk()
+        logger.warning("=" * 72)
+        logger.warning("安全提示：必须按住 SpaceMouse 左侧按钮，才会发送机械臂运动指令。")
+        logger.warning("松开按钮后，将停止发送运动指令。")
+        logger.warning("=" * 72)
         logger.info("Teleop ready: arm=%s ip=%s rate=%sHz", self.arm, self.ip, self.control_rate_hz)
 
     def _setup_kinematics(self) -> None:
@@ -301,10 +306,16 @@ class SpaceMouseMarvinTeleop:
         period_s = 1.0 / float(self.control_rate_hz)
         while True:
             t0 = time.monotonic()
-            if not self.mouse.get_button(cfg.DEADMAN_BUTTON):
+            deadman_pressed = self.mouse.get_button(cfg.DEADMAN_BUTTON)
+            if not deadman_pressed:
+                self._deadman_was_pressed = False
                 self._increments.reset_filter_state()
                 self._sleep_until_period(t0, period_s)
                 continue
+            if not self._deadman_was_pressed:
+                self._seed_pose_from_current_fk()
+                self._increments.reset_filter_state()
+                self._deadman_was_pressed = True
             vec3, quat_wxyz = self.mouse.get_vec3_quaternion_wxyz(
                 translation_scale=cfg.SM_VEC3_TRANSLATION_SCALE,
                 rotation_mode=cfg.SM_QUAT_ROTATION_MODE,
@@ -319,18 +330,18 @@ class SpaceMouseMarvinTeleop:
                 )
                 self._sleep_until_period(t0, period_s)
                 continue
-            self.pose.set_pose(candidate_position, candidate_orientation)
             self._maybe_log_telemetry(vec3, quat_wxyz, dvec, dq, time.monotonic())
-            self._send_ik_position_command()
+            if self._send_ik_position_command(candidate_position, candidate_orientation):
+                self.pose.set_pose(candidate_position, candidate_orientation)
             self._sleep_until_period(t0, period_s)
 
-    def _send_ik_position_command(self) -> None:
+    def _send_ik_position_command(self, target_position: np.ndarray, target_orientation: np.ndarray) -> bool:
         sub_data = self._subscribe()
         if sub_data is None:
             logger.warning("Subscribe failed; skip this cycle.")
-            return
+            return False
         ref_joints = sub_data["outputs"][self.arm_index]["fb_joint_pos"]
-        target_mat = _tcp_mat4_from_position_quat_mm(self.pose.position, self.pose.orientation_wxyz)
+        target_mat = _tcp_mat4_from_position_quat_mm(target_position, target_orientation)
 
         assert self.kine is not None
         sp = FX_InvKineSolvePara()
@@ -339,7 +350,7 @@ class SpaceMouseMarvinTeleop:
         result = self.kine.ik(sp)
         if not result:
             logger.warning("IK failed; skip this cycle.")
-            return
+            return False
         if result.m_Output_IsOutRange or result.m_Output_IsJntExd or any(result.m_Output_IsDeg):
             logger.warning(
                 "IK rejected: out_range=%s jnt_exd=%s deg=%s tags=%s",
@@ -348,12 +359,14 @@ class SpaceMouseMarvinTeleop:
                 [bool(value) for value in result.m_Output_IsDeg],
                 [bool(value) for value in result.m_Output_JntExdTags],
             )
-            return
+            return False
 
         joint_cmd = [float(value) for value in result.m_Output_RetJoint.to_list()]
         assert self.robot is not None
         if not self.robot.set_joint_position_cmd(self.arm, joint_cmd):
             logger.warning("SetJointPostionCmd failed; skip this cycle.")
+            return False
+        return True
 
     def _subscribe(self) -> dict | None:
         assert self.robot is not None
@@ -387,6 +400,7 @@ class SpaceMouseMarvinTeleop:
 
 def _configure_logging(level_name: str) -> None:
     logging.basicConfig(level=getattr(logging, level_name), format="%(levelname)s %(name)s: %(message)s")
+    logging.getLogger("debug_printer").setLevel(logging.WARNING)
 
 
 def main() -> None:
@@ -397,7 +411,7 @@ def main() -> None:
     parser.add_argument("--rate", type=int, default=cfg.CONTROL_RATE_HZ, help="control rate in Hz")
     parser.add_argument(
         "--log-level",
-        default="INFO",
+        default="WARNING",
         choices=("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"),
         help="logging level",
     )
