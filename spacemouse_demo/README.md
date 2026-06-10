@@ -9,6 +9,7 @@ SpaceMouse 增量输入 -> 累积 TCP 目标位姿 -> `Marvin_Kine.ik()` -> `Con
 - `config.py`：机器人 IP、控制周期、轴映射、速度/加速度比例、工作空间限制、`libspnav` 路径。
 - `spacemouse_input.py`：基于 `libspnav` 的 SpaceMouse 非阻塞读取。
 - `spacemouse_teleop.py`：Marvin 位置模式遥操作主循环。
+- `joint_drag_debug.py`：从 SDK `case7` 拆出来的独立关节拖拽调试脚本，支持 `Ctrl+C`、按钮松开延时退出、总超时自动关闭。
 - `ccs_m6_40.MvKDCfg`：本 demo 默认运动学配置文件。
 
 ## 依赖
@@ -50,6 +51,26 @@ python3 spacemouse_demo/spacemouse_input.py
 
 ```bash
 python3 spacemouse_demo/spacemouse_teleop.py --ip 192.168.1.190 --arm A --print-mouse
+```
+
+只想临时进入关节拖拽调试时，可以运行：
+
+```bash
+python3 spacemouse_demo/joint_drag_debug.py --ip 192.168.1.190 --arm A
+```
+
+默认行为：
+
+- 按住末端按钮开始拖拽。
+- 松开按钮不会退出，可以反复按住继续拖拽。
+- 总运行 `300` 秒后自动关闭。
+- 退出时会额外等待 `1` 秒，再退出拖拽并下使能。
+- `Ctrl+C` 可立即退出。
+
+也可以按需调整：
+
+```bash
+python3 spacemouse_demo/joint_drag_debug.py --timeout 120 --exit-delay 1
 ```
 
 也可以通过环境变量覆盖默认值：

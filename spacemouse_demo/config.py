@@ -37,9 +37,9 @@ SM_QUAT_ROTATION_MODE = "axis_angle"
 SM_ROT_SO3_SOURCE = "measurement_log"
 
 # Axis mapping: SpaceMouse [x, y, z, rx, ry, rz] -> robot base channels.
-AXIS_MAP = [2, 1, 0, 5, 3, 4]
-AXIS_SIGNS = [-1, -1, 1, -1, 1, 1]
-AXIS_ENABLE = [1, 1, 1, 0, 0, 0]
+AXIS_MAP = [2, 1, 0, 3, 5, 4]
+AXIS_SIGNS = [-1, -1, 1, -1, 1, -1]
+AXIS_ENABLE = [1, 1, 1, 1, 1, 1]
 
 # SpaceMouse left button is usually button 0. Motion commands are only sent
 # while this button is held.
@@ -47,9 +47,9 @@ DEADMAN_BUTTON = 0
 
 # Increment scaling and clamps. Translation is meters per cycle, rotation is
 # radians per cycle after so(3) mapping.
-TRANSLATION_SCALE = 0.001 / 350.0
-ROTATION_SCALE = 0.002 / 350.0
-MAX_TRANSLATION_PER_CYCLE = 0.001
+TRANSLATION_SCALE = 0.002 / 350.0
+ROTATION_SCALE = 0.008 / 350.0
+MAX_TRANSLATION_PER_CYCLE = 0.002
 MAX_ROTATION_PER_CYCLE = 0.01
 EMA_ALPHA = 1.0
 

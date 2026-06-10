@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import logging
 import math
 import os
@@ -31,6 +32,10 @@ from SDK_PYTHON.fx_kine import FX_InvKineSolvePara, Marvin_Kine
 from SDK_PYTHON.fx_robot import Concise_Marvin_Robot, DCSS
 
 logger = logging.getLogger(__name__)
+
+ERROR_LOG_CSV = os.path.join(CURRENT_DIR, "spacemouse_teleop_error_log.csv")
+POSITION_PLOT_PNG = os.path.join(CURRENT_DIR, "spacemouse_teleop_position_plot.png")
+ERROR_PLOT_PNG = os.path.join(CURRENT_DIR, "spacemouse_teleop_error_plot.png")
 
 
 def _arm_to_index(arm: str) -> int:
@@ -192,6 +197,123 @@ class TelemetryInterval:
         return True
 
 
+class TeleopErrorRecorder:
+    def __init__(self, csv_path: str, position_plot_path: str, error_plot_path: str) -> None:
+        self.csv_path = csv_path
+        self.position_plot_path = position_plot_path
+        self.error_plot_path = error_plot_path
+        self.t0: Optional[float] = None
+        self.records: list[dict[str, float | str | int]] = []
+
+    def record(
+        self,
+        target_position_m: np.ndarray,
+        actual_position_m: np.ndarray,
+        command_sent: bool,
+        status: str,
+    ) -> None:
+        now = time.perf_counter()
+        if self.t0 is None:
+            self.t0 = now
+        t = now - self.t0
+
+        target_mm = np.asarray(target_position_m, dtype=np.float64) * 1000.0
+        actual_mm = np.asarray(actual_position_m, dtype=np.float64) * 1000.0
+        err_mm = target_mm - actual_mm
+        err_norm_mm = float(np.linalg.norm(err_mm))
+
+        self.records.append(
+            {
+                "time_s": t,
+                "target_x_mm": float(target_mm[0]),
+                "target_y_mm": float(target_mm[1]),
+                "target_z_mm": float(target_mm[2]),
+                "actual_x_mm": float(actual_mm[0]),
+                "actual_y_mm": float(actual_mm[1]),
+                "actual_z_mm": float(actual_mm[2]),
+                "err_x_mm": float(err_mm[0]),
+                "err_y_mm": float(err_mm[1]),
+                "err_z_mm": float(err_mm[2]),
+                "err_norm_mm": err_norm_mm,
+                "command_sent": int(command_sent),
+                "status": status,
+            }
+        )
+
+    def save(self) -> None:
+        if not self.records:
+            logger.info("No teleop error records to save.")
+            return
+        self._save_csv()
+        self._save_plot()
+
+    def _save_csv(self) -> None:
+        with open(self.csv_path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=list(self.records[0].keys()))
+            writer.writeheader()
+            writer.writerows(self.records)
+        logger.warning("Saved SpaceMouse error log: %s", self.csv_path)
+
+    def _save_plot(self) -> None:
+        try:
+            import matplotlib.pyplot as plt
+        except ImportError:
+            logger.warning("matplotlib is not installed; skipped plot generation.")
+            return
+
+        t = [float(r["time_s"]) for r in self.records]
+        target_x = [float(r["target_x_mm"]) for r in self.records]
+        target_y = [float(r["target_y_mm"]) for r in self.records]
+        target_z = [float(r["target_z_mm"]) for r in self.records]
+        actual_x = [float(r["actual_x_mm"]) for r in self.records]
+        actual_y = [float(r["actual_y_mm"]) for r in self.records]
+        actual_z = [float(r["actual_z_mm"]) for r in self.records]
+        err_x = [float(r["err_x_mm"]) for r in self.records]
+        err_y = [float(r["err_y_mm"]) for r in self.records]
+        err_z = [float(r["err_z_mm"]) for r in self.records]
+        err_norm = [float(r["err_norm_mm"]) for r in self.records]
+
+        pos_fig, pos_axes = plt.subplots(3, 1, figsize=(12, 10), sharex=True)
+        position_series = [
+            ("X Position", target_x, actual_x),
+            ("Y Position", target_y, actual_y),
+            ("Z Position", target_z, actual_z),
+        ]
+        for ax, (title, target_values, actual_values) in zip(pos_axes, position_series):
+            ax.plot(t, target_values, label="target")
+            ax.plot(t, actual_values, label="actual")
+            ax.set_title(title)
+            ax.set_ylabel("mm")
+            ax.grid(True)
+            ax.legend(loc="upper right")
+        pos_axes[-1].set_xlabel("Time (s)")
+        pos_fig.tight_layout()
+        pos_fig.savefig(self.position_plot_path, dpi=150)
+        plt.close(pos_fig)
+        logger.warning("Saved SpaceMouse position plot: %s", self.position_plot_path)
+
+        fig, axes = plt.subplots(4, 1, figsize=(12, 10), sharex=True)
+        series = [
+            ("X Error (Target - Actual)", err_x),
+            ("Y Error (Target - Actual)", err_y),
+            ("Z Error (Target - Actual)", err_z),
+            ("3D Error Norm", err_norm),
+        ]
+        for ax, (title, values) in zip(axes, series):
+            ax.plot(t, values)
+            ax.axhline(1.0, color="tab:gray", linestyle="--", alpha=0.5, label="1 mm")
+            ax.axhline(-1.0, color="tab:gray", linestyle="--", alpha=0.5)
+            ax.set_title(title)
+            ax.set_ylabel("mm")
+            ax.grid(True)
+        axes[-1].set_xlabel("Time (s)")
+        axes[0].legend(loc="upper right")
+        fig.tight_layout()
+        fig.savefig(self.error_plot_path, dpi=150)
+        plt.close(fig)
+        logger.warning("Saved SpaceMouse error plot: %s", self.error_plot_path)
+
+
 class SpaceMouseMarvinTeleop:
     def __init__(
         self,
@@ -200,6 +322,7 @@ class SpaceMouseMarvinTeleop:
         config_path: str,
         control_rate_hz: int,
         telemetry_interval_s: float,
+        record_error_log: bool = True,
     ) -> None:
         self.ip = ip
         self.arm = arm.upper()
@@ -215,6 +338,9 @@ class SpaceMouseMarvinTeleop:
         self.kine: Optional[Marvin_Kine] = None
         self._closed = False
         self._deadman_was_pressed = False
+        self._error_recorder: Optional[TeleopErrorRecorder] = None
+        if record_error_log:
+            self._error_recorder = TeleopErrorRecorder(ERROR_LOG_CSV, POSITION_PLOT_PNG, ERROR_PLOT_PNG)
 
     def setup(self) -> None:
         self._setup_kinematics()
@@ -290,6 +416,11 @@ class SpaceMouseMarvinTeleop:
                 self.mouse.stop()
             except Exception as exc:
                 logger.warning("SpaceMouse stop failed: %s", exc)
+        if self._error_recorder is not None:
+            try:
+                self._error_recorder.save()
+            except Exception as exc:
+                logger.warning("Save teleop error plot failed: %s", exc)
         if self.robot is not None:
             try:
                 self.robot.disable(self.arm)
@@ -341,6 +472,10 @@ class SpaceMouseMarvinTeleop:
             logger.warning("Subscribe failed; skip this cycle.")
             return False
         ref_joints = sub_data["outputs"][self.arm_index]["fb_joint_pos"]
+        actual_position = self._actual_position_from_joints(ref_joints)
+        if actual_position is None:
+            logger.warning("FK failed while recording actual position; skip this cycle.")
+            return False
         target_mat = _tcp_mat4_from_position_quat_mm(target_position, target_orientation)
 
         assert self.kine is not None
@@ -350,6 +485,8 @@ class SpaceMouseMarvinTeleop:
         result = self.kine.ik(sp)
         if not result:
             logger.warning("IK failed; skip this cycle.")
+            if self._error_recorder is not None:
+                self._error_recorder.record(target_position, actual_position, False, "ik_failed")
             return False
         if result.m_Output_IsOutRange or result.m_Output_IsJntExd or any(result.m_Output_IsDeg):
             logger.warning(
@@ -359,18 +496,31 @@ class SpaceMouseMarvinTeleop:
                 [bool(value) for value in result.m_Output_IsDeg],
                 [bool(value) for value in result.m_Output_JntExdTags],
             )
+            if self._error_recorder is not None:
+                self._error_recorder.record(target_position, actual_position, False, "ik_rejected")
             return False
 
         joint_cmd = [float(value) for value in result.m_Output_RetJoint.to_list()]
         assert self.robot is not None
         if not self.robot.set_joint_position_cmd(self.arm, joint_cmd):
             logger.warning("SetJointPostionCmd failed; skip this cycle.")
+            if self._error_recorder is not None:
+                self._error_recorder.record(target_position, actual_position, False, "send_failed")
             return False
+        if self._error_recorder is not None:
+            self._error_recorder.record(target_position, actual_position, True, "sent")
         return True
 
     def _subscribe(self) -> dict | None:
         assert self.robot is not None
         return self.robot.subscribe(self._dcss)
+
+    def _actual_position_from_joints(self, joints: list[float]) -> Optional[np.ndarray]:
+        assert self.kine is not None
+        fk_mat = self.kine.fk(joints)
+        if not fk_mat:
+            return None
+        return np.array([fk_mat[0][3], fk_mat[1][3], fk_mat[2][3]], dtype=np.float64) * 1e-3
 
     def _maybe_log_telemetry(
         self,
@@ -420,11 +570,23 @@ def main() -> None:
         action="store_true",
         help="print SpaceMouse telemetry periodically",
     )
+    parser.add_argument(
+        "--no-error-log",
+        action="store_true",
+        help="disable CSV and plot recording for IK/command errors",
+    )
     args = parser.parse_args()
     _configure_logging(args.log_level)
 
     telemetry_interval = cfg.TELEMETRY_INTERVAL_S if args.print_mouse else 0.0
-    teleop = SpaceMouseMarvinTeleop(args.ip, args.arm, args.config, args.rate, telemetry_interval)
+    teleop = SpaceMouseMarvinTeleop(
+        args.ip,
+        args.arm,
+        args.config,
+        args.rate,
+        telemetry_interval,
+        record_error_log=not args.no_error_log,
+    )
 
     def _sigint(_sig, _frame) -> None:
         logger.info("Ctrl+C received; shutting down.")
